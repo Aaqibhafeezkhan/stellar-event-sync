@@ -1,4 +1,4 @@
-export class EventGuardError extends Error {
+export class EventSyncError extends Error {
   constructor(
     message: string,
     readonly code: string,
@@ -10,7 +10,7 @@ export class EventGuardError extends Error {
   }
 }
 
-export class IncompleteHistoryError extends EventGuardError {
+export class IncompleteHistoryError extends EventSyncError {
   constructor(requestedLedger: number, oldestAvailableLedger: number) {
     super(
       `History is incomplete: ledger ${requestedLedger} is older than the RPC retention floor ${oldestAvailableLedger}`,
@@ -20,13 +20,13 @@ export class IncompleteHistoryError extends EventGuardError {
   }
 }
 
-export class MalformedRpcResponseError extends EventGuardError {
+export class MalformedRpcResponseError extends EventSyncError {
   constructor(message: string, details: Readonly<Record<string, unknown>> = {}) {
     super(message, 'MALFORMED_RPC_RESPONSE', details);
   }
 }
 
-export class RpcRequestError extends EventGuardError {
+export class RpcRequestError extends EventSyncError {
   constructor(
     message: string,
     readonly retryable: boolean,

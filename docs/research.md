@@ -19,13 +19,13 @@ surface stays small.
 
 ## Comparison
 
-| Project | Primary purpose | Overlap | Difference from this project |
-| --- | --- | --- | --- |
-| Stellar event ingestion guide | Educational SQLite poller | Local event persistence | Explicitly assumes away retention recovery |
-| Mercury / Retroshades | Managed/custom indexing service | Historical event access | Hosted broader product; this is a self-hosted reliability primitive |
-| SoroScan | GraphQL/REST/webhook indexer | Event ingestion and storage | Much broader service architecture; not a focused TS checkpoint library |
-| Stellar Ingest SDK | Full ledger ingestion framework | Durable ingestion concerns | Ledger-scale Go toolkit; this MVP targets application-level `getEvents` consumers |
-| Mimir event poller | Application-specific bot ingestion | Cursor safety and retention handling | Strong prior art, but reliability logic is embedded in a Telegram bot rather than a reusable package |
+| Project                       | Primary purpose                    | Overlap                              | Difference from this project                                                                         |
+| ----------------------------- | ---------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| Stellar event ingestion guide | Educational SQLite poller          | Local event persistence              | Explicitly assumes away retention recovery                                                           |
+| Mercury / Retroshades         | Managed/custom indexing service    | Historical event access              | Hosted broader product; this is a self-hosted reliability primitive                                  |
+| SoroScan                      | GraphQL/REST/webhook indexer       | Event ingestion and storage          | Much broader service architecture; not a focused TS checkpoint library                               |
+| Stellar Ingest SDK            | Full ledger ingestion framework    | Durable ingestion concerns           | Ledger-scale Go toolkit; this MVP targets application-level `getEvents` consumers                    |
+| Mimir event poller            | Application-specific bot ingestion | Cursor safety and retention handling | Strong prior art, but reliability logic is embedded in a Telegram bot rather than a reusable package |
 
 The Grid's public corpus search found a live Soroban Indexer record but did not establish market
 demand or adoption. The comparison therefore supports technical differentiation, not a commercial

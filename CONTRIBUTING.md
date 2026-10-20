@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve Stellar Event Guard. Comment on an open issue before substantial work so
+Thanks for helping improve Stellar Event Sync. Comment on an open issue before substantial work so
 the maintainer can confirm scope and avoid duplicate effort.
 
 ## Clean setup
@@ -8,8 +8,8 @@ the maintainer can confirm scope and avoid duplicate effort.
 Install Node.js 22.5+ and Git, then run:
 
 ```bash
-git clone https://github.com/Webghost01-NG/stellar-event-guard.git
-cd stellar-event-guard
+git clone https://github.com/Webghost01-NG/stellar-event-sync.git
+cd stellar-event-sync
 npm ci
 npm run check
 npm test

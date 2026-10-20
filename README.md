@@ -1,8 +1,8 @@
-# Stellar Event Guard
+# Stellar Event Sync
 
 Crash-consistent ingestion primitives for applications that poll Stellar RPC `getEvents`.
 
-Stellar Event Guard is a small TypeScript library for teams that want to keep their own event
+Stellar Event Sync is a small TypeScript library for teams that want to keep their own event
 records without operating a general-purpose indexer. It deduplicates by Stellar event ID, stores
 events and their cursor checkpoint in one SQLite transaction, resumes after restart, and refuses to
 claim complete history when a checkpoint has fallen behind an RPC server's retention window.
@@ -37,8 +37,8 @@ retention, schema migrations, and production observability are not yet supported
 Node.js 22.5 or newer is required because the MVP uses Node's built-in `node:sqlite` module.
 
 ```bash
-git clone https://github.com/Webghost01-NG/stellar-event-guard.git
-cd stellar-event-guard
+git clone https://github.com/Webghost01-NG/stellar-event-sync.git
+cd stellar-event-sync
 npm ci
 npm test
 npm run example
@@ -48,7 +48,7 @@ The example starts at the current Testnet ledger and writes `stellar-events.sqli
 endpoint with `STELLAR_RPC_URL`. It does not submit transactions or require a secret key.
 
 ```ts
-import { SqliteEventStore, StellarRpcEventSource, synchronize } from 'stellar-event-guard';
+import { SqliteEventStore, StellarRpcEventSource, synchronize } from 'stellar-event-sync';
 
 const rpc = new StellarRpcEventSource('https://soroban-testnet.stellar.org');
 const health = await rpc.health();
