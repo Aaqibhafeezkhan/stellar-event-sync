@@ -65,7 +65,19 @@ export class StellarRpcEventSource implements EventSource {
         const body: unknown = await response.json();
         if (!isRecord(body)) throw new MalformedRpcResponseError('RPC body is not an object');
         if (body.error !== undefined) {
-          throw new RpcRequestError(`RPC ${method} returned an error`, false);
+          let rpcCode: number | undefined;
+          let errorMessage = `RPC ${method} returned an error`;
+          if (isRecord(body.error)) {
+            if (typeof body.error.code === 'number') {
+              rpcCode = body.error.code;
+            }
+            if (body.error.message !== undefined) {
+              errorMessage = sanitizeRpcErrorMessage(body.error.message);
+            }
+          } else {
+            errorMessage = sanitizeRpcErrorMessage(body.error);
+          }
+          throw new RpcRequestError(errorMessage, false, rpcCode);
         }
         if (!('result' in body)) throw new MalformedRpcResponseError('RPC body has no result');
         return body.result;
@@ -79,6 +91,16 @@ export class StellarRpcEventSource implements EventSource {
     if (lastError instanceof Error) throw lastError;
     throw new RpcRequestError('RPC request failed', false);
   }
+}
+
+function sanitizeRpcErrorMessage(rawMessage: unknown): string {
+  const text = typeof rawMessage === 'string' ? rawMessage : String(rawMessage ?? 'Unknown error');
+  const cleaned = text.replace(/[\x00-\x1F\x7F]/g, '');
+  const bounded = cleaned.length > 200 ? cleaned.slice(0, 197) + '...' : cleaned;
+  return bounded
+    .replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
+    .replace(/token[=:][\s\"']*[a-zA-Z0-9_\-\.]+/gi, 'token=[REDACTED]')
+    .replace(/password[=:][\s\"']*[^\s\"']+/gi, 'password=[REDACTED]');
 }
 
 function parseEvent(value: unknown): StellarEvent {

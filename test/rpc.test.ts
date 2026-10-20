@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MalformedRpcResponseError, StellarRpcEventSource } from '../src/index.js';
+import { MalformedRpcResponseError, RpcRequestError, StellarRpcEventSource } from '../src/index.js';
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -38,5 +38,55 @@ test('rejects malformed event responses', async () => {
   await assert.rejects(
     source.fetch({ startLedger: 1 }),
     (error) => error instanceof MalformedRpcResponseError,
+  );
+});
+
+test('retains numeric RPC code and sanitizes error message', async () => {
+  const source = new StellarRpcEventSource('https://rpc.invalid', {
+    retries: 0,
+    fetch: async () => response({ error: { code: -32603, message: 'Internal error with token=secret123' } }),
+  });
+  await assert.rejects(
+    source.health(),
+    (error) => {
+      if (!(error instanceof RpcRequestError)) return false;
+      assert.equal(error.rpcCode, -32603);
+      assert.equal(error.message, 'Internal error with token=[REDACTED]');
+      return true;
+    },
+  );
+});
+
+test('bounds oversized error messages', async () => {
+  const longMsg = 'a'.repeat(300);
+  const source = new StellarRpcEventSource('https://rpc.invalid', {
+    retries: 0,
+    fetch: async () => response({ error: { code: -32000, message: longMsg } }),
+  });
+  await assert.rejects(
+    source.health(),
+    (error) => {
+      if (!(error instanceof RpcRequestError)) return false;
+      assert.equal(error.rpcCode, -32000);
+      assert.equal(error.message.length <= 200, true);
+      assert.equal(error.message.endsWith('...'), true);
+      return true;
+    },
+  );
+});
+
+test('handles malformed error objects and non-string error messages', async () => {
+  const source = new StellarRpcEventSource('https://rpc.invalid', {
+    retries: 0,
+    fetch: async () => response({ error: 12345 }),
+  });
+  await assert.rejects(
+    source.health(),
+    (error) => {
+      if (!(error instanceof RpcRequestError)) return false;
+      assert.equal(error.rpcCode, undefined);
+      assert.equal(error.message, '12345');
+      return true;
+    },
   );
 });
