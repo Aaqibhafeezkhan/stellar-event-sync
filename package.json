@@ -1,5 +1,5 @@
 {
-  "name": "stellar-event-guard",
+  "name": "stellar-event-sync",
   "version": "0.1.0",
   "description": "Crash-consistent event ingestion primitives for Stellar RPC",
   "type": "module",
