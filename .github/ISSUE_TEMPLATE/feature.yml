@@ -1,6 +1,6 @@
 name: Feature request
 description: Propose a scoped reliability improvement.
-title: "feat: "
+title: 'feat: '
 labels: [enhancement]
 body:
   - type: textarea
