@@ -1,0 +1,31 @@
+{
+  "name": "stellar-event-guard",
+  "version": "0.1.0",
+  "description": "Crash-consistent event ingestion primitives for Stellar RPC",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "exports": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc --noEmit && eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "example": "npm run build && node dist/examples/sync.js"
+  },
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "@eslint/js": "^9.38.0",
+    "@types/node": "^22.18.12",
+    "eslint": "^9.38.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.2"
+  }
+}

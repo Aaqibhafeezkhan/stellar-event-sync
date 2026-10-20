@@ -1,0 +1,121 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import {
+  IncompleteHistoryError,
+  SqliteEventStore,
+  synchronize,
+  type EventPage,
+  type EventSource,
+  type FetchRequest,
+  type RpcHealth,
+  type StellarEvent,
+} from '../src/index.js';
+
+const event = (id: string, ledger: number): StellarEvent => ({
+  id,
+  ledger,
+  ledgerClosedAt: '2026-01-01T00:00:00Z',
+  topic: ['AAAA'],
+  value: 'BBBB',
+  txHash: `tx-${id}`,
+  type: 'contract',
+  raw: { id, ledger },
+});
+
+class FixtureSource implements EventSource {
+  calls: FetchRequest[] = [];
+  constructor(
+    private readonly pages: EventPage[],
+    private readonly healthResult: RpcHealth = {
+      oldestLedger: 100,
+      latestLedger: 110,
+      ledgerRetentionWindow: 11,
+    },
+  ) {}
+  async health(): Promise<RpcHealth> {
+    return this.healthResult;
+  }
+  async fetch(request: FetchRequest): Promise<EventPage> {
+    this.calls.push(request);
+    const page = this.pages.shift();
+    if (!page) throw new Error('fixture exhausted');
+    return page;
+  }
+}
+
+function store(): SqliteEventStore {
+  return new SqliteEventStore(join(mkdtempSync(join(tmpdir(), 'event-guard-')), 'events.sqlite'));
+}
+
+test('KT-01: duplicate delivery persists each event once', async () => {
+  const database = store();
+  const source = new FixtureSource([
+    { events: [event('a', 100), event('a', 100)], cursor: 'page-1', latestLedger: 101 },
+    { events: [event('a', 100), event('b', 101)], latestLedger: 101 },
+  ]);
+  const result = await synchronize(source, database, { source: 'fixture', startLedger: 100 });
+  assert.equal(database.countEvents(), 2);
+  assert.deepEqual(
+    { inserted: result.inserted, duplicates: result.duplicates },
+    { inserted: 2, duplicates: 2 },
+  );
+  database.close();
+});
+
+test('KT-02: interrupted page transaction rolls back events and checkpoint, then restarts', async () => {
+  const database = store();
+  const first = new FixtureSource([
+    { events: [event('a', 100)], cursor: 'page-1', latestLedger: 101 },
+  ]);
+  await assert.rejects(
+    synchronize(first, database, {
+      source: 'fixture',
+      startLedger: 100,
+      beforeCheckpoint: () => {
+        throw new Error('simulated crash');
+      },
+    }),
+    /simulated crash/,
+  );
+  assert.equal(database.countEvents(), 0);
+  assert.equal(database.checkpoint('fixture'), undefined);
+
+  const restarted = new FixtureSource([{ events: [event('a', 100)], latestLedger: 100 }]);
+  const result = await synchronize(restarted, database, { source: 'fixture', startLedger: 100 });
+  assert.equal(result.inserted, 1);
+  assert.equal(database.countEvents(), 1);
+  database.close();
+});
+
+test('KT-03: expired retention window is explicit and no request is made', async () => {
+  const database = store();
+  const source = new FixtureSource([], {
+    oldestLedger: 200,
+    latestLedger: 300,
+    ledgerRetentionWindow: 101,
+  });
+  await assert.rejects(
+    synchronize(source, database, { source: 'fixture', startLedger: 199 }),
+    (error) => error instanceof IncompleteHistoryError && error.code === 'INCOMPLETE_HISTORY',
+  );
+  assert.equal(source.calls.length, 0);
+  database.close();
+});
+
+test('KT-04: cursor is committed page-by-page and used after restart', async () => {
+  const database = store();
+  const first = new FixtureSource([
+    { events: [event('a', 100)], cursor: 'page-1', latestLedger: 102 },
+  ]);
+  await synchronize(first, database, { source: 'fixture', startLedger: 100, maxPages: 1 });
+  assert.deepEqual(database.checkpoint('fixture'), { cursor: 'page-1', nextLedger: 101 });
+
+  const restarted = new FixtureSource([{ events: [event('b', 101)], latestLedger: 102 }]);
+  await synchronize(restarted, database, { source: 'fixture', startLedger: 100 });
+  assert.deepEqual(restarted.calls[0], { cursor: 'page-1', limit: 100 });
+  assert.equal(database.countEvents(), 2);
+  database.close();
+});
