@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose a scoped reliability improvement.
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe a concrete user or operator problem, not only a solution.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected behavior and scope
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and prior art
+  - type: textarea
+    id: tests
+    attributes:
+      label: Reliability tests
+      description: Which failure cases should prove this works?
+    validations:
+      required: true
