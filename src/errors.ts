@@ -27,11 +27,48 @@ export class MalformedRpcResponseError extends EventSyncError {
 }
 
 export class RpcRequestError extends EventSyncError {
+  readonly status?: number | undefined;
+
   constructor(
     message: string,
     readonly retryable: boolean,
+    detailsOrOptions?: Readonly<Record<string, unknown>> | ErrorOptions,
     options?: ErrorOptions,
   ) {
-    super(message, 'RPC_REQUEST_FAILED', { retryable }, options);
+    const isErrorOptions =
+      detailsOrOptions !== undefined &&
+      typeof detailsOrOptions === 'object' &&
+      'cause' in detailsOrOptions &&
+      Object.keys(detailsOrOptions).length === 1;
+
+    const details = isErrorOptions
+      ? {}
+      : ((detailsOrOptions as Readonly<Record<string, unknown>> | undefined) ?? {});
+    const errorOptions = isErrorOptions ? (detailsOrOptions as ErrorOptions) : options;
+
+    super(message, 'RPC_REQUEST_FAILED', { retryable, ...details }, errorOptions);
+    if (typeof details.status === 'number') {
+      this.status = details.status;
+    }
+  }
+}
+
+export class RpcTimeoutError extends EventSyncError {
+  constructor(
+    message = 'RPC request timed out',
+    details: Readonly<Record<string, unknown>> = {},
+    options?: ErrorOptions,
+  ) {
+    super(message, 'RPC_TIMEOUT', details, options);
+  }
+}
+
+export class RpcAbortError extends EventSyncError {
+  constructor(
+    message = 'RPC request aborted',
+    details: Readonly<Record<string, unknown>> = {},
+    options?: ErrorOptions,
+  ) {
+    super(message, 'RPC_ABORTED', details, options);
   }
 }
