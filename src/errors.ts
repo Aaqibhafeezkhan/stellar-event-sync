@@ -28,6 +28,7 @@ export class MalformedRpcResponseError extends EventSyncError {
 
 export class RpcRequestError extends EventSyncError {
   readonly status?: number | undefined;
+  readonly rpcCode?: number | undefined;
 
   constructor(
     message: string,
@@ -49,6 +50,9 @@ export class RpcRequestError extends EventSyncError {
     super(message, 'RPC_REQUEST_FAILED', { retryable, ...details }, errorOptions);
     if (typeof details.status === 'number') {
       this.status = details.status;
+    }
+    if (typeof details.rpcCode === 'number') {
+      this.rpcCode = details.rpcCode;
     }
   }
 }

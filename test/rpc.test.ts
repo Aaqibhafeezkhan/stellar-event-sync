@@ -410,6 +410,53 @@ test('pure policy evaluation distinguishes statuses, transport failures, and JSO
   );
 });
 
+test('retains numeric RPC code and sanitizes error messages', async () => {
+  const source = new StellarRpcEventSource('https://rpc.invalid', {
+    retries: 0,
+    fetch: async () =>
+      response({
+        error: { code: -32603, message: 'Bad\nBearer secret token=abc password=hunter2' },
+      }),
+  });
+
+  await assert.rejects(source.health(), (error) => {
+    assert.ok(error instanceof RpcRequestError);
+    assert.equal(error.rpcCode, -32603);
+    assert.equal(error.details['rpcCode'], -32603);
+    assert.doesNotMatch(error.message, /secret|abc|hunter2/);
+    assert.match(error.message, /\[REDACTED\]/);
+    return true;
+  });
+});
+
+test('bounds oversized RPC error messages', async () => {
+  const source = new StellarRpcEventSource('https://rpc.invalid', {
+    retries: 0,
+    fetch: async () => response({ error: { code: -32000, message: 'a'.repeat(300) } }),
+  });
+
+  await assert.rejects(source.health(), (error) => {
+    assert.ok(error instanceof RpcRequestError);
+    assert.equal(error.message.length, 200);
+    assert.ok(error.message.endsWith('...'));
+    return true;
+  });
+});
+
+test('uses a bounded fallback for malformed RPC error objects', async () => {
+  const source = new StellarRpcEventSource('https://rpc.invalid', {
+    retries: 0,
+    fetch: async () => response({ error: 12345 }),
+  });
+
+  await assert.rejects(source.health(), (error) => {
+    assert.ok(error instanceof RpcRequestError);
+    assert.equal(error.rpcCode, undefined);
+    assert.equal(error.message, 'RPC getHealth returned an error');
+    return true;
+  });
+});
+
 test('serializes a contract filter on the initial range request', async () => {
   let body = '';
   const source = new StellarRpcEventSource('https://rpc.invalid', {
@@ -421,7 +468,6 @@ test('serializes a contract filter on the initial range request', async () => {
   });
 
   await source.fetch({ startLedger: 1, limit: 2, contractId: 'CABC' });
-
   assert.equal(
     body,
     '{"jsonrpc":"2.0","id":1,"method":"getEvents","params":{"pagination":{"limit":2},"xdrFormat":"base64","startLedger":1,"filters":[{"type":"contract","contractIds":["CABC"]}]}}',
@@ -444,7 +490,6 @@ test('does not repeat the contract filter on cursor requests', async () => {
 
   await source.fetch({ startLedger: 1, limit: 2, contractId: 'CABC' });
   await source.fetch({ cursor: 'next', limit: 2, contractId: 'CABC' });
-
   assert.equal(JSON.parse(bodies[1] ?? '{}').params.filters, undefined);
   assert.deepEqual(JSON.parse(bodies[1] ?? '{}').params.pagination, { cursor: 'next', limit: 2 });
 });
@@ -460,7 +505,6 @@ test('keeps the initial request unfiltered when no contract is provided', async 
   });
 
   await source.fetch({ startLedger: 1, limit: 2 });
-
   assert.equal(
     body,
     '{"jsonrpc":"2.0","id":1,"method":"getEvents","params":{"pagination":{"limit":2},"xdrFormat":"base64","startLedger":1}}',

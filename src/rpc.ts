@@ -275,8 +275,11 @@ export class StellarRpcEventSource implements EventSource {
           const body: unknown = await response.json();
           if (!isRecord(body)) throw new MalformedRpcResponseError('RPC body is not an object');
           if (body.error !== undefined) {
-            throw new RpcRequestError(`RPC ${method} returned an error`, false, {
-              rpcError: body.error,
+            const rpcError = isRecord(body.error) ? body.error : undefined;
+            const rpcCode = typeof rpcError?.code === 'number' ? rpcError.code : undefined;
+            const errorMessage = sanitizeRpcErrorMessage(rpcError?.message ?? body.error, method);
+            throw new RpcRequestError(errorMessage, false, {
+              ...(rpcCode === undefined ? {} : { rpcCode }),
               method,
             });
           }
@@ -361,6 +364,19 @@ export class StellarRpcEventSource implements EventSource {
     if (lastError instanceof Error) throw lastError;
     throw new RpcRequestError('RPC request failed', false);
   }
+}
+
+function sanitizeRpcErrorMessage(rawMessage: unknown, method: string): string {
+  const fallback = `RPC ${method} returned an error`;
+  const text = typeof rawMessage === 'string' ? rawMessage : fallback;
+  // Control bytes are never useful in operator-facing diagnostics.
+  // eslint-disable-next-line no-control-regex
+  const cleaned = text.replace(/[\u0000-\u001f\u007f]/g, '');
+  const redacted = cleaned
+    .replace(/bearer\s+[a-zA-Z0-9_.-]+/gi, 'Bearer [REDACTED]')
+    .replace(/token[=:][\s"']*[a-zA-Z0-9_.-]+/gi, 'token=[REDACTED]')
+    .replace(/password[=:][\s"']*[^\s"']+/gi, 'password=[REDACTED]');
+  return redacted.length > 200 ? `${redacted.slice(0, 197)}...` : redacted || fallback;
 }
 
 function parseEvent(value: unknown): StellarEvent {
