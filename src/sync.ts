@@ -7,6 +7,7 @@ export interface SyncOptions {
   startLedger: number;
   pageSize?: number;
   maxPages?: number;
+  contractId?: string;
   beforeCheckpoint?: (page: number) => void;
 }
 
@@ -31,7 +32,11 @@ export async function synchronize(
   while (pages < (options.maxPages ?? 1_000)) {
     const page = await rpc.fetch(
       cursor === undefined
-        ? { startLedger: next, limit: options.pageSize ?? 100 }
+        ? {
+            startLedger: next,
+            limit: options.pageSize ?? 100,
+            ...(options.contractId === undefined ? {} : { contractId: options.contractId }),
+          }
         : { cursor, limit: options.pageSize ?? 100 },
     );
     pages += 1;

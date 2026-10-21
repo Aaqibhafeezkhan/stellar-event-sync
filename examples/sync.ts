@@ -1,6 +1,7 @@
 import { SqliteEventStore, StellarRpcEventSource, synchronize } from '../src/index.js';
 
 const rpcUrl = process.env.STELLAR_RPC_URL ?? 'https://soroban-testnet.stellar.org';
+const contractId = process.env.STELLAR_CONTRACT_ID;
 const source = new StellarRpcEventSource(rpcUrl);
 const health = await source.health();
 const store = new SqliteEventStore('stellar-events.sqlite');
@@ -10,6 +11,7 @@ try {
     source: rpcUrl,
     startLedger: health.latestLedger,
     maxPages: 10,
+    ...(contractId === undefined ? {} : { contractId }),
   });
   console.log(JSON.stringify(result, null, 2));
 } finally {

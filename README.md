@@ -45,7 +45,14 @@ npm run example
 ```
 
 The example starts at the current Testnet ledger and writes `stellar-events.sqlite`. Override the
-endpoint with `STELLAR_RPC_URL`. It does not submit transactions or require a secret key.
+endpoint with `STELLAR_RPC_URL`, or set `STELLAR_CONTRACT_ID` to ingest events for one contract.
+When `STELLAR_CONTRACT_ID` is unset, the example explicitly uses the unfiltered behavior. The
+contract filter is included only in the initial range request; cursor pagination requests retain the
+RPC cursor without repeating the filter. It does not submit transactions or require a secret key.
+
+```bash
+STELLAR_CONTRACT_ID=YOUR_CONTRACT_ID npm run example
+```
 
 ```ts
 import { SqliteEventStore, StellarRpcEventSource, synchronize } from 'stellar-event-sync';
