@@ -156,3 +156,95 @@ test('KT-05: invalid page size fails before health or fetch and boundaries seria
   }
   database.close();
 });
+
+test('one terminal page completes at a one-page limit', async () => {
+  const database = store();
+  const source = new FixtureSource([{ events: [event('a', 100)], latestLedger: 100 }]);
+
+  const result = await synchronize(source, database, {
+    source: 'fixture',
+    startLedger: 100,
+    maxPages: 1,
+  });
+
+  assert.equal(result.state, 'complete');
+  assert.equal(result.pages, 1);
+  assert.equal(source.calls.length, 1);
+  database.close();
+});
+
+test('completion on the final allowed page is not reported as limited', async () => {
+  const database = store();
+  const source = new FixtureSource([
+    { events: [event('a', 100)], cursor: 'page-1', latestLedger: 101 },
+    { events: [event('b', 101)], latestLedger: 101 },
+  ]);
+
+  const result = await synchronize(source, database, {
+    source: 'fixture',
+    startLedger: 100,
+    maxPages: 2,
+  });
+
+  assert.equal(result.state, 'complete');
+  assert.equal(result.pages, 2);
+  assert.equal(source.calls.length, 2);
+  database.close();
+});
+
+test('page limit returns incomplete state without requesting page N+1 and restart resumes', async () => {
+  const database = store();
+  const source = new FixtureSource([
+    { events: [event('a', 100)], cursor: 'page-1', latestLedger: 102 },
+    { events: [event('b', 101)], cursor: 'page-2', latestLedger: 102 },
+    { events: [event('c', 102)], latestLedger: 102 },
+  ]);
+
+  const result = await synchronize(source, database, {
+    source: 'fixture',
+    startLedger: 100,
+    maxPages: 2,
+  });
+
+  assert.deepEqual(result, {
+    source: 'fixture',
+    state: 'incomplete-page-limit',
+    pageLimit: 2,
+    pages: 2,
+    received: 2,
+    inserted: 2,
+    duplicates: 0,
+    nextLedger: 102,
+    checkpointCursor: 'page-2',
+  });
+  assert.equal(source.calls.length, 2);
+  assert.deepEqual(database.checkpoint('fixture'), { cursor: 'page-2', nextLedger: 102 });
+
+  const restarted = new FixtureSource([{ events: [event('c', 102)], latestLedger: 102 }]);
+  const restartedResult = await synchronize(restarted, database, {
+    source: 'fixture',
+    startLedger: 100,
+  });
+  assert.equal(restartedResult.state, 'complete');
+  assert.deepEqual(restarted.calls[0], { cursor: 'page-2', limit: 100 });
+  assert.equal(database.countEvents(), 3);
+  database.close();
+});
+
+test('invalid maximum pages fails before health or fetch', async () => {
+  const database = store();
+  for (const maxPages of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    const source = new FixtureSource([]);
+    await assert.rejects(
+      synchronize(source, database, { source: 'fixture', startLedger: 100, maxPages }),
+      (error) =>
+        error instanceof RpcConfigurationError &&
+        error.code === 'RPC_CONFIGURATION_INVALID' &&
+        error.details['field'] === 'maxPages',
+      `maxPages ${maxPages}`,
+    );
+    assert.equal(source.healthCalls, 0, `health calls for maxPages ${maxPages}`);
+    assert.equal(source.calls.length, 0, `fetch calls for maxPages ${maxPages}`);
+  }
+  database.close();
+});

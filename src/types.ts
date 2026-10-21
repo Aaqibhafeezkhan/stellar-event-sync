@@ -34,11 +34,10 @@ export interface EventSource {
   fetch(request: FetchRequest): Promise<EventPage>;
 }
 
-export type SyncState = 'complete' | 'incomplete-history';
+export type SyncState = 'complete' | 'incomplete-history' | 'incomplete-page-limit';
 
-export interface SyncResult {
+interface SyncResultBase {
   source: string;
-  state: SyncState;
   pages: number;
   received: number;
   inserted: number;
@@ -46,3 +45,20 @@ export interface SyncResult {
   checkpointCursor?: string;
   nextLedger: number;
 }
+
+export interface CompleteSyncResult extends SyncResultBase {
+  state: 'complete';
+}
+
+/** Reserved for diagnostics that represent a retention gap rather than a successful run. */
+export interface IncompleteHistorySyncResult extends SyncResultBase {
+  state: 'incomplete-history';
+}
+
+export interface PageLimitSyncResult extends SyncResultBase {
+  state: 'incomplete-page-limit';
+  pageLimit: number;
+  checkpointCursor: string;
+}
+
+export type SyncResult = CompleteSyncResult | IncompleteHistorySyncResult | PageLimitSyncResult;

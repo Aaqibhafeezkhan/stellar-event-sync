@@ -6,6 +6,7 @@ export interface SyncResultDiagnostic {
   formatVersion: typeof SYNC_RESULT_FORMAT_VERSION;
   source: string;
   state: SyncResult['state'];
+  pageLimit?: number | string;
   pages: number | string;
   events: {
     received: number | string;
@@ -24,6 +25,9 @@ export function formatSyncResultJson(result: SyncResult): string {
     formatVersion: SYNC_RESULT_FORMAT_VERSION,
     source: result.source,
     state: result.state,
+    ...(result.state === 'incomplete-page-limit'
+      ? { pageLimit: jsonInteger(result.pageLimit) }
+      : {}),
     pages: jsonInteger(result.pages),
     events: {
       received: jsonInteger(result.received),
