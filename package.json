@@ -13,11 +13,14 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:site": "node scripts/build-site.mjs",
+    "check:site": "node scripts/check-site.mjs",
     "check": "tsc --noEmit && eslint . && prettier --check .",
     "format": "prettier --write .",
     "test": "npm run build && node --test dist/test/*.test.js",
     "example": "npm run build && node dist/examples/sync.js",
-    "diagnostics": "npm run build && node dist/src/cli/index.js"
+    "diagnostics": "npm run build && node dist/src/cli/index.js",
+    "serve:site": "python3 -m http.server 4173 --directory web-dist"
   },
   "bin": {
     "stellar-event-sync-diagnostics": "dist/src/cli/index.js"

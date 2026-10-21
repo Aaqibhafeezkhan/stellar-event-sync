@@ -1,135 +1,122 @@
 # Stellar Event Sync
 
-Crash-consistent ingestion primitives for applications that poll Stellar RPC `getEvents`.
+Crash-consistent TypeScript primitives for applications that ingest Stellar RPC events into their
+own durable storage.
 
-Stellar Event Sync is a small TypeScript library for teams that want to keep their own event
-records without operating a general-purpose indexer. It deduplicates by Stellar event ID, stores
-events and their cursor checkpoint in one SQLite transaction, resumes after restart, and refuses to
-claim complete history when a checkpoint has fallen behind an RPC server's retention window.
+[Documentation](https://stellar-event-sync.vercel.app/docs) ·
+[Good first issues](https://github.com/Webghost01-NG/stellar-event-sync/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) ·
+[Contribution guide](CONTRIBUTING.md) · [Security](SECURITY.md)
 
-> Status: experimental MVP. The API may change before 1.0. This project is independent and is not
-> affiliated with the Stellar Development Foundation or Drips.
+> Experimental MVP: the API may change before 1.0. This project is independent and is not affiliated
+> with the Stellar Development Foundation, Drips, or Tiger Waves.
 
-## Why this exists
+## The problem
 
-Stellar RPC intentionally keeps a bounded event history. The official ingestion guide demonstrates
-a useful SQLite cron job, but explicitly assumes polling is frequent enough to avoid oldest-ledger
-recovery. The RPC documentation also tells clients to deduplicate repeated events by unique `id`.
-This library isolates those reliability concerns. It does **not** replace Mercury, SoroScan,
-Goldsky, or a full indexing pipeline.
+Stellar RPC retains a bounded event history and may deliver the same event more than once. An
+application that advances its cursor separately from its database writes can silently skip work
+after a crash—or claim complete history after the requested ledgers have expired.
 
-## Guarantees
+Stellar Event Sync makes those failure boundaries explicit. It validates RPC responses, deduplicates
+by Stellar event ID, and commits each page's events and checkpoint in one SQLite transaction.
 
-- An event ID is persisted at most once in one SQLite store.
-- A page's events and checkpoint commit atomically.
-- A crash before checkpoint commit rolls back that page, allowing safe replay.
-- A requested ledger below `getHealth.oldestLedger` raises `IncompleteHistoryError`.
-- Retryable transport and HTTP 5xx failures use bounded exponential retries.
-- Malformed RPC responses fail closed with typed errors.
+## What works
 
-These guarantees cover the local event store. They do not make arbitrary external side effects
-(webhooks, emails, payments) exactly-once. Consumers should use an outbox or their own idempotency
-keys. Chain reorganizations, multi-provider reconciliation, historical backfill outside RPC
-retention, schema migrations, and production observability are not yet supported.
+- Typed `getHealth` and `getEvents` integration
+- Event-ID deduplication with deterministic replay
+- Atomic SQLite event and checkpoint commits
+- Restart from the last committed opaque cursor
+- Explicit `INCOMPLETE_HISTORY` detection
+- Contract filtering on initial range requests
+- Configurable retry, timeout, jitter, and `Retry-After` handling
+- Safe RPC diagnostics and a read-only diagnostics CLI
+- Deterministic tests for duplicates, crashes, retention, pagination, and malformed responses
 
-## Requirements and quick start
+Not yet supported: automatic historical backfill, schema migrations, PostgreSQL, transactional
+outbox delivery, reorganization handling, or multi-provider reconciliation. The package is not
+published to npm.
 
-Node.js 22.5 or newer is required because the MVP uses Node's built-in `node:sqlite` module.
+## Architecture
+
+```text
+Stellar RPC ──► validated event page ──► SQLite transaction
+      │                                      ├── unique events
+      └── retained ledger window             └── checkpoint
+                                                     │
+                                    crash/restart ◄──┘
+```
+
+`StellarRpcEventSource` validates transport data. `synchronize` enforces retention and cursor rules.
+`SqliteEventStore` owns the atomic commit boundary. See the
+[architecture guide](https://stellar-event-sync.vercel.app/docs/architecture).
+
+## Quickstart
+
+Node.js 22.5 or newer is required because the MVP uses built-in `node:sqlite`.
 
 ```bash
 git clone https://github.com/Webghost01-NG/stellar-event-sync.git
 cd stellar-event-sync
 npm ci
+npm run check
 npm test
 npm run example
 ```
 
-The example starts at the current Testnet ledger and writes `stellar-events.sqlite`. Override the
-endpoint with `STELLAR_RPC_URL`, or set `STELLAR_CONTRACT_ID` to ingest events for one contract.
-When `STELLAR_CONTRACT_ID` is unset, the example explicitly uses the unfiltered behavior. The
-contract filter is included only in the initial range request; cursor pagination requests retain the
-RPC cursor without repeating the filter. It does not submit transactions or require a secret key.
-
-```bash
-STELLAR_CONTRACT_ID=YOUR_CONTRACT_ID npm run example
-```
+The example starts at the current Testnet ledger and writes `stellar-events.sqlite`; it does not
+claim older history. Override the endpoint with `STELLAR_RPC_URL` and optionally filter with
+`STELLAR_CONTRACT_ID`.
 
 ```ts
-import {
-  formatSyncResultJson,
-  SqliteEventStore,
-  StellarRpcEventSource,
-  synchronize,
-} from 'stellar-event-sync';
+import { SqliteEventStore, StellarRpcEventSource, synchronize } from './dist/src/index.js';
 
 const rpc = new StellarRpcEventSource('https://soroban-testnet.stellar.org');
 const health = await rpc.health();
 const store = new SqliteEventStore('events.sqlite');
 
-const result = await synchronize(rpc, store, {
-  source: 'stellar-testnet',
-  startLedger: health.latestLedger,
-});
-
-process.stderr.write('sync complete\n');
-process.stdout.write(`${formatSyncResultJson(result)}\n`);
-store.close();
+try {
+  const result = await synchronize(rpc, store, {
+    source: 'stellar-testnet',
+    startLedger: health.latestLedger,
+  });
+  console.log(result);
+} finally {
+  store.close();
+}
 ```
-
-`formatSyncResultJson` emits one versioned JSON document containing the source label, state, page
-and event counters, and checkpoint position. It intentionally excludes event payloads and secrets.
-The current envelope has `formatVersion: 1`; integer `bigint` values are encoded as decimal JSON
-strings. Keep logs on stderr so stdout remains safe for automation.
-
-## Architecture
-
-`StellarRpcEventSource` validates and pages RPC responses. `synchronize` enforces retention and
-cursor rules. `SqliteEventStore` owns the atomic boundary: event inserts and checkpoint updates are
-one transaction. The event ID primary key makes replay deterministic.
-
-```text
-Stellar RPC -> validated page -> SQLite transaction -> events + checkpoint
-                    |                    |
-              typed failure        rollback on crash
-```
-
-See [the research gate](docs/research.md), [architecture decisions](docs/architecture.md), and the
-[roadmap](docs/roadmap.md).
 
 ## Development
 
 ```bash
 npm ci
-npm run check
-npm test
+npm run check       # TypeScript, ESLint, Prettier
+npm test            # build and deterministic test suite
+npm run build:site  # static website and documentation
 ```
 
-The tests map directly to KT-01 through KT-04 and include malformed-response and retry cases. Read
-[CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Use the issue forms to report a
-bug or propose a feature; security reports follow [SECURITY.md](SECURITY.md).
+## Roadmap
 
-## Diagnostics
+Near-term work includes schema migrations, storage interfaces, fault injection, property-based
+verification, retention recovery states, and stronger filter validation. Later work may include a
+transactional outbox, PostgreSQL adapter, provider consistency audits, and release automation.
 
-The read-only diagnostics command checks RPC health and compares it with a local checkpoint. It
-never syncs, writes to SQLite, or sends event mutations. It requires an HTTP(S) URL and rejects URL
-credentials. Human output goes to stdout for healthy results and stderr for failures; `--json`
-emits a versioned report on stdout. URL credentials, query strings, and fragments are redacted.
+The [full roadmap](https://stellar-event-sync.vercel.app/docs/roadmap) distinguishes shipped work
+from proposals.
 
-```bash
-npx stellar-event-sync-diagnostics --rpc-url https://soroban-testnet.stellar.org --store events.sqlite
-npx stellar-event-sync-diagnostics --rpc-url https://soroban-testnet.stellar.org --store events.sqlite --json
-```
+## Contributing
 
-Exit codes are `0` healthy, `2` incomplete history, `3` malformed RPC response, `4` network
-failure, and `64` invalid arguments. Do not put secret headers or tokens on the command line.
+Independent contributors are welcome. Issues include current behavior, expected behavior, scope,
+acceptance criteria, tests, dependencies, and difficulty. Comment before substantial work so the
+maintainer can confirm ownership.
 
-## Relevant Stellar documentation
+- [Beginner-friendly issues](https://github.com/Webghost01-NG/stellar-event-sync/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)
+- [All help-wanted issues](https://github.com/Webghost01-NG/stellar-event-sync/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22)
+- [Contributor onboarding](https://stellar-event-sync.vercel.app/docs/contributing)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
 
-- [RPC `getEvents`](https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getEvents)
-- [RPC `getHealth`](https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getHealth)
-- [Official event ingestion guide](https://developers.stellar.org/docs/build/guides/events/ingest)
-- [Stellar indexer overview](https://developers.stellar.org/docs/data/indexers)
+Real contributors are recognized automatically through GitHub's commit and contribution history.
+No rewards, program admission, or funding are guaranteed.
 
-## License
+## Security and license
 
-[MIT](LICENSE) © 2026 Webghost01-NG.
+Report vulnerabilities through GitHub's private security advisory flow as described in
+[SECURITY.md](SECURITY.md). Licensed under the [MIT License](LICENSE).

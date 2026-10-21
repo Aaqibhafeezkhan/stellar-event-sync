@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-21T00:00:00.000Z",
+  "title": "Design System: Stellar Event Sync",
+  "extensions": {
+    "colorMeta": {
+      "ledger-ink": {
+        "role": "primary",
+        "displayName": "Ledger Ink",
+        "canonical": "#111111",
+        "tonalRamp": [
+          "#111111",
+          "#292929",
+          "#464646",
+          "#666666",
+          "#898989",
+          "#adadad",
+          "#d2d2d2",
+          "#f3f3f3"
+        ]
+      },
+      "warm-paper": {
+        "role": "neutral",
+        "displayName": "Warm Paper",
+        "canonical": "#f5f4ef",
+        "tonalRamp": [
+          "#24231f",
+          "#41403b",
+          "#605f59",
+          "#818079",
+          "#a3a29b",
+          "#c6c5be",
+          "#e4e3dc",
+          "#f5f4ef"
+        ]
+      },
+      "panel-white": {
+        "role": "neutral",
+        "displayName": "Panel White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#262626",
+          "#454545",
+          "#666666",
+          "#888888",
+          "#aaaaaa",
+          "#cccccc",
+          "#eeeeee",
+          "#ffffff"
+        ]
+      },
+      "graphite": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "canonical": "#686762",
+        "tonalRamp": [
+          "#24231f",
+          "#3b3a36",
+          "#53524d",
+          "#6c6b65",
+          "#87857f",
+          "#a3a19a",
+          "#c1bfb8",
+          "#e1dfd8"
+        ]
+      },
+      "rule-line": {
+        "role": "neutral",
+        "displayName": "Rule Line",
+        "canonical": "#d4d2ca",
+        "tonalRamp": [
+          "#25241f",
+          "#403f39",
+          "#5c5b54",
+          "#797871",
+          "#97968e",
+          "#b6b4ac",
+          "#d4d2ca",
+          "#f1efe7"
+        ]
+      },
+      "verified-green": {
+        "role": "primary",
+        "displayName": "Verified Green",
+        "canonical": "#276749",
+        "tonalRamp": [
+          "#082318",
+          "#123b29",
+          "#1d543b",
+          "#286e4d",
+          "#438a66",
+          "#66a984",
+          "#94c9aa",
+          "#cbead8"
+        ]
+      },
+      "failure-red": {
+        "role": "primary",
+        "displayName": "Failure Red",
+        "canonical": "#9b2c2c",
+        "tonalRamp": [
+          "#310b0b",
+          "#511313",
+          "#721d1d",
+          "#942828",
+          "#b64343",
+          "#d56a6a",
+          "#ec9d9d",
+          "#f8d4d4"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Hero and documentation titles only." },
+      "body": { "displayName": "Body", "purpose": "Explanations and long-form documentation." },
+      "label": {
+        "displayName": "Machine Label",
+        "purpose": "Code, cursors, event rows, and status."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "micro-lift",
+        "value": "translateY(-1px)",
+        "purpose": "Button hover feedback only."
+      }
+    ],
+    "breakpoints": [
+      { "name": "mobile-layout", "value": "800px" },
+      { "name": "small-mobile", "value": "480px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The decisive action on a surface.",
+      "html": "<a class=\"ds-btn-primary\" href=\"#\">Read documentation</a>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;min-height:44px;padding:.62rem 1rem;border:1px solid #111;border-radius:999px;background:#111;color:#fff;font:700 1rem SESans,ui-sans-serif,sans-serif;text-decoration:none}.ds-btn-primary:hover{transform:translateY(-1px)}.ds-btn-primary:focus-visible{outline:3px solid #276749;outline-offset:3px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A visible but subordinate action.",
+      "html": "<a class=\"ds-btn-secondary\" href=\"#\">View GitHub</a>",
+      "css": ".ds-btn-secondary{display:inline-flex;align-items:center;min-height:44px;padding:.62rem 1rem;border:1px solid #111;border-radius:999px;background:#f5f4ef;color:#111;font:700 1rem SESans,ui-sans-serif,sans-serif;text-decoration:none}.ds-btn-secondary:hover{transform:translateY(-1px)}.ds-btn-secondary:focus-visible{outline:3px solid #276749;outline-offset:3px}"
+    },
+    {
+      "name": "Documentation Search",
+      "kind": "input",
+      "refersTo": "search-input",
+      "description": "A quiet filter inside the documentation rail.",
+      "html": "<input class=\"ds-search\" type=\"search\" placeholder=\"Filter topics\">",
+      "css": ".ds-search{width:100%;border:1px solid #d4d2ca;background:#fff;color:#111;padding:.7rem;border-radius:8px;font:400 1rem SESans,ui-sans-serif,sans-serif}.ds-search:focus-visible{outline:3px solid #276749;outline-offset:3px}"
+    },
+    {
+      "name": "Proof Ledger",
+      "kind": "custom",
+      "description": "An inverted record showing deduplication and atomic progress.",
+      "html": "<div class=\"ds-proof\"><div class=\"ds-row\"><span>5301983</span><span>event_8f3</span><b>INSERT</b></div><div class=\"ds-row\"><span>cursor</span><span>004…8f3</span><b>SAVED</b></div></div>",
+      "css": ".ds-proof{background:#111;color:#f5f4ef;padding:2rem;font:400 .82rem ui-monospace,SFMono-Regular,monospace}.ds-row{display:grid;grid-template-columns:6rem 1fr auto;gap:1rem;padding:1.2rem 0;border-bottom:1px solid #343434}.ds-row b{color:#8ed1b2}.ds-proof:focus-within{outline:3px solid #276749;outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Ledger Proof Sheet",
+    "overview": "The interface feels like a technical record that can withstand inspection: calm, precise, and public about state. Warm paper, dark ink, fine rules, and a single verification signal create an editorial surface rather than a generic software dashboard.",
+    "keyCharacteristics": [
+      "Warm monochrome surfaces with restrained semantic color.",
+      "Ruled records and checkpoints as the signature visual language.",
+      "Large, tightly set headlines paired with highly legible body copy.",
+      "Flat surfaces; borders and tonal inversion provide structure."
+    ],
+    "rules": [
+      {
+        "name": "The Signal Rarity Rule",
+        "body": "Green and red appear only when they communicate state.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Sans explains; monospace proves.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Evidence Rule",
+        "body": "A surface earns hierarchy through contrast and structure, never ornamental shadow.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use rules, alignment, and whitespace to make technical relationships inspectable.",
+      "Do reserve monospace for code and machine state.",
+      "Do preserve visible focus, 44px targets, and reduced-motion behavior."
+    ],
+    "donts": [
+      "Don't introduce decorative gradients, glass cards, or generic dashboard widgets.",
+      "Don't use semantic colors as ambient brand accents.",
+      "Don't imply product activity with fake charts, counters, partnerships, or testimonials."
+    ]
+  }
+}
