@@ -20,6 +20,12 @@ export class IncompleteHistoryError extends EventSyncError {
   }
 }
 
+export class RpcConfigurationError extends EventSyncError {
+  constructor(message: string, details: Readonly<Record<string, unknown>> = {}) {
+    super(message, 'RPC_CONFIGURATION_INVALID', details);
+  }
+}
+
 export class MalformedRpcResponseError extends EventSyncError {
   constructor(message: string, details: Readonly<Record<string, unknown>> = {}) {
     super(message, 'MALFORMED_RPC_RESPONSE', details);

@@ -18,3 +18,7 @@ and for starting a new range after a completed walk. A cursor is never synthesiz
 Unknown/malformed responses fail closed. A retry never mutates the checkpoint. Retention expiry is a
 distinct structured error because silently clamping to the oldest available ledger would make an
 incorrect completeness claim.
+
+Local configuration is validated before network access. Endpoints containing URL userinfo and page
+limits outside the documented 1–10,000 range fail with `RpcConfigurationError`, so an unsafe or
+rejected request is never sent.

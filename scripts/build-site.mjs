@@ -47,7 +47,7 @@ const docs = [
     'Core concepts',
     'stellar-rpc',
     'Stellar RPC integration',
-    `<p>The client uses supported JSON-RPC methods <code>getHealth</code> and <code>getEvents</code>. A request begins with <code>startLedger</code>; subsequent pages use only the opaque cursor.</p><h2>Contract filtering</h2><p>Set <code>contractId</code> on synchronization options. The filter is sent only on the initial range request because the continuation cursor represents the active query.</p><h2>Validation</h2><p>Unsafe ledger numbers, malformed topics, invalid event types, and missing result fields fail with <code>MalformedRpcResponseError</code>.</p>`,
+    `<p>The client uses supported JSON-RPC methods <code>getHealth</code> and <code>getEvents</code>. A request begins with <code>startLedger</code>; subsequent pages use only the opaque cursor.</p><h2>Contract filtering</h2><p>Set <code>contractId</code> on synchronization options. The filter is sent only on the initial range request because the continuation cursor represents the active query.</p><h2>Validation</h2><p>Unsafe ledger numbers, malformed topics, invalid event types, and missing result fields fail with <code>MalformedRpcResponseError</code>.</p><p>Endpoint URLs with embedded credentials and page limits outside 1–10,000 fail locally with <code>RpcConfigurationError</code> before any request.</p>`,
   ],
   [
     'Core concepts',
@@ -83,7 +83,7 @@ const docs = [
     'Reliability',
     'error-handling',
     'Error handling',
-    `<p>Errors are structured for programmatic handling and bounded for safe diagnostics.</p><table><tr><th>Error</th><th>Meaning</th></tr><tr><td><code>IncompleteHistoryError</code></td><td>Requested history predates retention</td></tr><tr><td><code>MalformedRpcResponseError</code></td><td>Remote data failed validation</td></tr><tr><td><code>RpcRequestError</code></td><td>HTTP or JSON-RPC failure</td></tr><tr><td><code>RpcTimeoutError</code></td><td>Configured deadline elapsed</td></tr><tr><td><code>RpcAbortError</code></td><td>Request was aborted</td></tr></table><p>RPC codes are retained when present; messages are length-bounded and common credential patterns are redacted.</p>`,
+    `<p>Errors are structured for programmatic handling and bounded for safe diagnostics.</p><table><tr><th>Error</th><th>Meaning</th></tr><tr><td><code>IncompleteHistoryError</code></td><td>Requested history predates retention</td></tr><tr><td><code>MalformedRpcResponseError</code></td><td>Remote data failed validation</td></tr><tr><td><code>RpcRequestError</code></td><td>HTTP or JSON-RPC failure</td></tr><tr><td><code>RpcTimeoutError</code></td><td>Configured deadline elapsed</td></tr><tr><td><code>RpcAbortError</code></td><td>Request was aborted</td></tr><tr><td><code>RpcConfigurationError</code></td><td>Invalid local endpoint or page-size configuration</td></tr></table><p>RPC codes are retained when present; messages are length-bounded and common credential patterns are redacted.</p>`,
   ],
   [
     'Reliability',
@@ -95,7 +95,7 @@ const docs = [
     'Operate',
     'configuration',
     'Configuration',
-    `<table><tr><th>Option</th><th>Default</th><th>Purpose</th></tr><tr><td><code>source</code></td><td>required</td><td>Checkpoint namespace</td></tr><tr><td><code>startLedger</code></td><td>required</td><td>First requested ledger without a checkpoint</td></tr><tr><td><code>pageSize</code></td><td>100</td><td>RPC page limit</td></tr><tr><td><code>maxPages</code></td><td>1,000</td><td>Bound one synchronization call</td></tr><tr><td><code>contractId</code></td><td>none</td><td>Initial request contract filter</td></tr></table><p>Retry policy additionally supports attempts, delays, caps, jitter, timeout, <code>Retry-After</code>, and injectable clock/sleep functions.</p>`,
+    `<table><tr><th>Option</th><th>Default</th><th>Purpose</th></tr><tr><td><code>source</code></td><td>required</td><td>Checkpoint namespace</td></tr><tr><td><code>startLedger</code></td><td>required</td><td>First requested ledger without a checkpoint</td></tr><tr><td><code>pageSize</code></td><td>100 (1–10,000)</td><td>RPC page limit</td></tr><tr><td><code>maxPages</code></td><td>1,000</td><td>Bound one synchronization call</td></tr><tr><td><code>contractId</code></td><td>none</td><td>Initial request contract filter</td></tr></table><p>Retry policy additionally supports attempts, delays, caps, jitter, timeout, <code>Retry-After</code>, and injectable clock/sleep functions.</p>`,
   ],
   [
     'Operate',
@@ -125,7 +125,7 @@ const docs = [
     'Develop',
     'security',
     'Security',
-    `<p>Never pass private keys to this project. RPC endpoints may include sensitive query tokens, so diagnostics remove credentials, query strings, and fragments.</p><h2>Reporting</h2><p>Use the repository's private <a href="https://github.com/Webghost01-NG/stellar-event-sync/security/advisories/new">security advisory form</a>. Do not publish an exploitable report in an issue.</p>`,
+    `<p>Never pass private keys to this project. RPC endpoints may include sensitive query tokens, so diagnostics remove credentials, query strings, and fragments.</p><p>The client rejects endpoint URLs containing userinfo with <code>RpcConfigurationError</code> and exposes only the credential-free origin for diagnostics.</p><h2>Reporting</h2><p>Use the repository's private <a href="https://github.com/Webghost01-NG/stellar-event-sync/security/advisories/new">security advisory form</a>. Do not publish an exploitable report in an issue.</p>`,
   ],
   [
     'Develop',

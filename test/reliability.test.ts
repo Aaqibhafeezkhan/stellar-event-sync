@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   IncompleteHistoryError,
+  RpcConfigurationError,
   SqliteEventStore,
   synchronize,
   type EventPage,
@@ -27,6 +28,7 @@ const event = (id: string, ledger: number): StellarEvent => ({
 
 class FixtureSource implements EventSource {
   calls: FetchRequest[] = [];
+  healthCalls = 0;
   constructor(
     private readonly pages: EventPage[],
     private readonly healthResult: RpcHealth = {
@@ -36,6 +38,7 @@ class FixtureSource implements EventSource {
     },
   ) {}
   async health(): Promise<RpcHealth> {
+    this.healthCalls += 1;
     return this.healthResult;
   }
   async fetch(request: FetchRequest): Promise<EventPage> {
@@ -117,5 +120,39 @@ test('KT-04: cursor is committed page-by-page and used after restart', async () 
   await synchronize(restarted, database, { source: 'fixture', startLedger: 100 });
   assert.deepEqual(restarted.calls[0], { cursor: 'page-1', limit: 100 });
   assert.equal(database.countEvents(), 2);
+  database.close();
+});
+
+test('KT-05: invalid page size fails before health or fetch and boundaries serialize', async () => {
+  const database = store();
+  for (const pageSize of [0, -1, 1.5, 10_001, Number.NaN]) {
+    const source = new FixtureSource([]);
+    await assert.rejects(
+      synchronize(source, database, { source: 'fixture', startLedger: 100, pageSize }),
+      (error) =>
+        error instanceof RpcConfigurationError &&
+        error.code === 'RPC_CONFIGURATION_INVALID' &&
+        error.details['field'] === 'pageSize',
+      `pageSize ${pageSize}`,
+    );
+    assert.equal(source.healthCalls, 0, `health calls for pageSize ${pageSize}`);
+    assert.equal(source.calls.length, 0, `fetch calls for pageSize ${pageSize}`);
+  }
+
+  for (const [sourceName, pageSize, expected] of [
+    ['minimum', 1, 1],
+    ['maximum', 10_000, 10_000],
+  ] as const) {
+    const source = new FixtureSource([
+      { events: [event(`event-${expected}`, 100)], latestLedger: 100 },
+    ]);
+    const result = await synchronize(source, database, {
+      source: sourceName,
+      startLedger: 100,
+      pageSize,
+    });
+    assert.equal(result.pages, 1, sourceName);
+    assert.deepEqual(source.calls[0], { startLedger: 100, limit: expected }, sourceName);
+  }
   database.close();
 });
