@@ -1,6 +1,7 @@
 import {
   MalformedRpcResponseError,
   RpcAbortError,
+  RpcConfigurationError,
   RpcRequestError,
   RpcTimeoutError,
 } from './errors.js';
@@ -200,15 +201,74 @@ function isAbortError(error: unknown): boolean {
   return false;
 }
 
+/** Stellar RPC accepts `getEvents` page limits from 1 through 10,000. */
+export const MIN_PAGE_LIMIT = 1;
+export const MAX_PAGE_LIMIT = 10_000;
+export const DEFAULT_PAGE_LIMIT = 100;
+
+/**
+ * Validate an RPC endpoint before any request is attempted.
+ *
+ * Credentials in URL userinfo leak through process listings, logs, and copied diagnostics, so they
+ * are rejected rather than stripped. The returned URL exposes a safe `origin` for diagnostics.
+ */
+export function validateRpcEndpoint(value: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new RpcConfigurationError('RPC endpoint must be a valid absolute URL', {
+      field: 'rpcUrl',
+      reason: 'invalid_url',
+    });
+  }
+
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new RpcConfigurationError('RPC endpoint must use http or https', {
+      field: 'rpcUrl',
+      reason: 'unsupported_protocol',
+    });
+  }
+
+  if (url.username !== '' || url.password !== '') {
+    throw new RpcConfigurationError(
+      'RPC endpoint must not contain credentials; configure a header-based provider instead',
+      { field: 'rpcUrl', reason: 'embedded_credentials' },
+    );
+  }
+
+  return url;
+}
+
+/** Validate a `getEvents` page limit, returning the documented default when omitted. */
+export function validatePageLimit(value: number | undefined, field = 'limit'): number {
+  if (value === undefined) return DEFAULT_PAGE_LIMIT;
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < MIN_PAGE_LIMIT ||
+    value > MAX_PAGE_LIMIT
+  ) {
+    throw new RpcConfigurationError(
+      `${field} must be an integer between ${MIN_PAGE_LIMIT} and ${MAX_PAGE_LIMIT}`,
+      { field, min: MIN_PAGE_LIMIT, max: MAX_PAGE_LIMIT },
+    );
+  }
+  return value;
+}
+
 export class StellarRpcEventSource implements EventSource {
   private readonly requestFetch: typeof fetch;
   private readonly policy: ResolvedRetryPolicy;
+  private readonly rpcUrl: string;
+  /** Credential-free scheme, host, and port of the configured endpoint. */
+  readonly origin: string;
   private requestId = 0;
 
-  constructor(
-    private readonly rpcUrl: string,
-    options: RpcClientOptions = {},
-  ) {
+  constructor(rpcUrl: string, options: RpcClientOptions = {}) {
+    const endpoint = validateRpcEndpoint(rpcUrl);
+    this.rpcUrl = rpcUrl;
+    this.origin = endpoint.origin;
     this.requestFetch = options.fetch ?? globalThis.fetch;
     this.policy = resolvePolicy(options);
   }
@@ -227,7 +287,7 @@ export class StellarRpcEventSource implements EventSource {
     if ((request.cursor === undefined) === (request.startLedger === undefined)) {
       throw new TypeError('Exactly one of cursor or startLedger is required');
     }
-    const pagination: Record<string, unknown> = { limit: request.limit ?? 100 };
+    const pagination: Record<string, unknown> = { limit: validatePageLimit(request.limit) };
     if (request.cursor !== undefined) pagination.cursor = request.cursor;
     const params: Record<string, unknown> = { pagination, xdrFormat: 'base64' };
     if (request.startLedger !== undefined) params.startLedger = request.startLedger;

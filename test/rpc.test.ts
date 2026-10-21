@@ -6,9 +6,11 @@ import {
   MalformedRpcResponseError,
   parseRetryAfter,
   RpcAbortError,
+  RpcConfigurationError,
   RpcRequestError,
   RpcTimeoutError,
   StellarRpcEventSource,
+  validatePageLimit,
 } from '../src/index.js';
 
 function response(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
@@ -509,4 +511,143 @@ test('keeps the initial request unfiltered when no contract is provided', async 
     body,
     '{"jsonrpc":"2.0","id":1,"method":"getEvents","params":{"pagination":{"limit":2},"xdrFormat":"base64","startLedger":1}}',
   );
+});
+
+test('rejects credentials embedded in RPC endpoint URLs before any request', () => {
+  const endpoints = [
+    { name: 'username', url: 'https://sentinel-user@rpc.example.test' },
+    { name: 'password', url: 'https://:sentinel-password@rpc.example.test' },
+    {
+      name: 'username and password',
+      url: 'https://sentinel-user:sentinel-password@rpc.example.test',
+    },
+    {
+      name: 'percent-encoded userinfo',
+      url: 'https://%73entinel-user:%73entinel-password@rpc.example.test',
+    },
+    { name: 'IPv6 host', url: 'https://sentinel-user:sentinel-password@[::1]:8000' },
+    { name: 'localhost', url: 'http://sentinel-user:sentinel-password@localhost:8000' },
+    { name: 'malformed URL with userinfo', url: 'https://sentinel-user:sentinel-password@' },
+  ];
+
+  for (const endpoint of endpoints) {
+    let called = false;
+    assert.throws(
+      () =>
+        new StellarRpcEventSource(endpoint.url, {
+          fetch: async () => {
+            called = true;
+            return response({ result: { latestLedger: 1, events: [] } });
+          },
+        }),
+      (error) => {
+        assert.ok(error instanceof RpcConfigurationError, endpoint.name);
+        assert.equal(error.code, 'RPC_CONFIGURATION_INVALID', endpoint.name);
+        assert.equal(error.details['field'], 'rpcUrl', endpoint.name);
+        assert.match(error.message, /endpoint|URL/i, endpoint.name);
+        assert.doesNotMatch(error.message, /sentinel/, endpoint.name);
+        assert.doesNotMatch(JSON.stringify(error.details), /sentinel/, endpoint.name);
+        return true;
+      },
+    );
+    assert.equal(called, false, endpoint.name);
+  }
+});
+
+test('rejects invalid and unsupported RPC endpoint URLs without echoing them', () => {
+  for (const endpoint of [
+    { name: 'malformed', url: 'not-a-url' },
+    { name: 'relative', url: '/rpc' },
+    { name: 'unsupported protocol', url: 'ftp://sentinel-user:sentinel-password@rpc.example.test' },
+  ]) {
+    assert.throws(
+      () => new StellarRpcEventSource(endpoint.url),
+      (error) => {
+        assert.ok(error instanceof RpcConfigurationError, endpoint.name);
+        assert.equal(error.code, 'RPC_CONFIGURATION_INVALID', endpoint.name);
+        assert.doesNotMatch(error.message, /sentinel/, endpoint.name);
+        return true;
+      },
+    );
+  }
+});
+
+test('accepts credential-free endpoints and exposes only the safe origin', async () => {
+  for (const endpoint of [
+    'https://rpc.example.test',
+    'https://rpc.example.test:443/rpc?network=testnet',
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+    'http://[::1]:8000',
+  ]) {
+    let requestedUrl = '';
+    const source = new StellarRpcEventSource(endpoint, {
+      retries: 0,
+      fetch: async (input) => {
+        requestedUrl = String(input);
+        return response({ result: { oldestLedger: 1, latestLedger: 2, ledgerRetentionWindow: 1 } });
+      },
+    });
+    assert.equal(source.origin, new URL(endpoint).origin, endpoint);
+    assert.doesNotMatch(source.origin, /@|sentinel/, endpoint);
+    await source.health();
+    assert.equal(requestedUrl, endpoint);
+  }
+});
+
+test('validates getEvents page limits before fetch', async () => {
+  const invalidLimits = [
+    { name: 'NaN', limit: Number.NaN },
+    { name: 'fraction', limit: 1.5 },
+    { name: 'zero', limit: 0 },
+    { name: 'negative', limit: -1 },
+    { name: 'above maximum', limit: 10_001 },
+    { name: 'infinity', limit: Number.POSITIVE_INFINITY },
+    { name: 'non-number', limit: '100' as unknown as number },
+  ];
+
+  for (const fixture of invalidLimits) {
+    let calls = 0;
+    const source = new StellarRpcEventSource('https://rpc.invalid', {
+      retries: 0,
+      fetch: async () => {
+        calls += 1;
+        return response({ result: { latestLedger: 2, events: [] } });
+      },
+    });
+
+    await assert.rejects(source.fetch({ startLedger: 1, limit: fixture.limit }), (error) => {
+      assert.ok(error instanceof RpcConfigurationError, fixture.name);
+      assert.equal(error.code, 'RPC_CONFIGURATION_INVALID', fixture.name);
+      assert.equal(error.details['field'], 'limit', fixture.name);
+      assert.match(error.message, /limit must be an integer between 1 and 10000/, fixture.name);
+      assert.doesNotMatch(error.message, /startLedger|getEvents|jsonrpc/, fixture.name);
+      return true;
+    });
+    assert.equal(calls, 0, fixture.name);
+  }
+});
+
+test('serializes minimum, maximum, and default page limits', async () => {
+  assert.equal(validatePageLimit(undefined), 100);
+  assert.equal(validatePageLimit(1), 1);
+  assert.equal(validatePageLimit(10_000), 10_000);
+
+  for (const [limit, expected] of [
+    [1, 1],
+    [10_000, 10_000],
+    [undefined, 100],
+  ] as const) {
+    let body = '';
+    const source = new StellarRpcEventSource('https://rpc.invalid', {
+      retries: 0,
+      fetch: async (_url, init) => {
+        body = String(init?.body);
+        return response({ result: { latestLedger: 2, events: [] } });
+      },
+    });
+
+    await source.fetch({ startLedger: 1, ...(limit === undefined ? {} : { limit }) });
+    assert.equal(JSON.parse(body).params.pagination.limit, expected);
+  }
 });

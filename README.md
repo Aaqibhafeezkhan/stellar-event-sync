@@ -28,6 +28,7 @@ by Stellar event ID, and commits each page's events and checkpoint in one SQLite
 - Explicit `INCOMPLETE_HISTORY` detection
 - Contract filtering on initial range requests
 - Configurable retry, timeout, jitter, and `Retry-After` handling
+- Local validation of RPC endpoint URLs and `getEvents` page limits
 - Safe RPC diagnostics and a read-only diagnostics CLI
 - Deterministic tests for duplicates, crashes, retention, pagination, and malformed responses
 
@@ -117,6 +118,12 @@ Real contributors are recognized automatically through GitHub's commit and contr
 No rewards, program admission, or funding are guaranteed.
 
 ## Security and license
+
+RPC endpoint URLs must not embed credentials. `StellarRpcEventSource` rejects URL userinfo with a
+typed `RpcConfigurationError` before any request and exposes only the credential-free `origin` for
+diagnostics. Use provider-supported header authentication, for example through a custom `fetch`
+wrapper. `getEvents` page limits must be integers from 1 to 10,000; `synchronize` validates
+`pageSize` before reading RPC health.
 
 Report vulnerabilities through GitHub's private security advisory flow as described in
 [SECURITY.md](SECURITY.md). Licensed under the [MIT License](LICENSE).

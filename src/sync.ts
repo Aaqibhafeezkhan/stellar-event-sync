@@ -1,4 +1,5 @@
 import { IncompleteHistoryError } from './errors.js';
+import { validatePageLimit } from './rpc.js';
 import { SqliteEventStore } from './store.js';
 import type { EventSource, SyncResult } from './types.js';
 
@@ -16,6 +17,7 @@ export async function synchronize(
   store: SqliteEventStore,
   options: SyncOptions,
 ): Promise<SyncResult> {
+  const pageSize = validatePageLimit(options.pageSize, 'pageSize');
   const health = await rpc.health();
   const saved = store.checkpoint(options.source);
   const nextLedger = saved?.nextLedger ?? options.startLedger;
@@ -34,10 +36,10 @@ export async function synchronize(
       cursor === undefined
         ? {
             startLedger: next,
-            limit: options.pageSize ?? 100,
+            limit: pageSize,
             ...(options.contractId === undefined ? {} : { contractId: options.contractId }),
           }
-        : { cursor, limit: options.pageSize ?? 100 },
+        : { cursor, limit: pageSize },
     );
     pages += 1;
     received += page.events.length;
