@@ -231,6 +231,9 @@ export class StellarRpcEventSource implements EventSource {
     if (request.cursor !== undefined) pagination.cursor = request.cursor;
     const params: Record<string, unknown> = { pagination, xdrFormat: 'base64' };
     if (request.startLedger !== undefined) params.startLedger = request.startLedger;
+    if (request.startLedger !== undefined && request.contractId !== undefined) {
+      params.filters = [{ type: 'contract', contractIds: [request.contractId] }];
+    }
     const result = await this.call('getEvents', params);
     if (!isRecord(result) || !Array.isArray(result.events)) {
       throw new MalformedRpcResponseError('getEvents result has no events array');
