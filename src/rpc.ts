@@ -1,16 +1,208 @@
-import { MalformedRpcResponseError, RpcRequestError } from './errors.js';
+import {
+  MalformedRpcResponseError,
+  RpcAbortError,
+  RpcRequestError,
+  RpcTimeoutError,
+} from './errors.js';
 import type { EventPage, EventSource, FetchRequest, RpcHealth, StellarEvent } from './types.js';
 
-interface RpcClientOptions {
-  retries?: number;
-  retryDelayMs?: number;
-  fetch?: typeof fetch;
+export type JitterStrategy =
+  'none' | 'full' | 'equal' | ((delayMs: number, attempt: number) => number);
+
+export interface RetryPolicy {
+  maxAttempts?: number | undefined;
+  maxRetries?: number | undefined;
+  initialDelayMs?: number | undefined;
+  maxDelayMs?: number | undefined;
+  backoffFactor?: number | undefined;
+  jitter?: JitterStrategy | boolean | undefined;
+  timeoutMs?: number | undefined;
+  maxRetryAfterMs?: number | undefined;
+  sleep?: ((ms: number) => Promise<void>) | undefined;
+  now?: (() => number) | undefined;
+  random?: (() => number) | undefined;
+}
+
+export interface RpcClientOptions {
+  retries?: number | undefined;
+  retryDelayMs?: number | undefined;
+  timeoutMs?: number | undefined;
+  sleep?: ((ms: number) => Promise<void>) | undefined;
+  retry?: RetryPolicy | undefined;
+  fetch?: typeof fetch | undefined;
+}
+
+export interface RetryDecision {
+  retry: boolean;
+  delayMs: number;
+  reason:
+    | 'retry_after'
+    | 'exponential_backoff'
+    | 'max_retries_exceeded'
+    | 'aborted'
+    | 'malformed_rpc_response'
+    | 'non_retryable_error';
+}
+
+export interface ResolvedRetryPolicy {
+  maxRetries: number;
+  initialDelayMs: number;
+  maxDelayMs: number;
+  backoffFactor: number;
+  jitter: JitterStrategy | boolean;
+  timeoutMs?: number | undefined;
+  maxRetryAfterMs: number;
+  sleep: (ms: number) => Promise<void>;
+  now: () => number;
+  random: () => number;
+}
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+export function isRetryableStatus(status: number): boolean {
+  return status === 429 || status === 408 || (status >= 500 && status <= 599);
+}
+
+export function parseRetryAfter(
+  header: string | null | undefined,
+  nowMs: number = Date.now(),
+): number | undefined {
+  if (!header) return undefined;
+  const trimmed = header.trim();
+  if (!trimmed) return undefined;
+
+  if (/^\d+$/.test(trimmed)) {
+    const seconds = Number.parseInt(trimmed, 10);
+    return Number.isSafeInteger(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
+  }
+
+  const parsedTime = Date.parse(trimmed);
+  if (!Number.isNaN(parsedTime)) {
+    return Math.max(0, parsedTime - nowMs);
+  }
+
+  return undefined;
+}
+
+export function evaluateRetry(
+  policy: {
+    maxRetries: number;
+    initialDelayMs: number;
+    maxDelayMs: number;
+    backoffFactor: number;
+    jitter?: JitterStrategy | boolean | undefined;
+    maxRetryAfterMs?: number | undefined;
+    now?: (() => number) | undefined;
+    random?: (() => number) | undefined;
+  },
+  attempt: number,
+  error: unknown,
+): RetryDecision {
+  if (attempt >= policy.maxRetries) {
+    return { retry: false, delayMs: 0, reason: 'max_retries_exceeded' };
+  }
+
+  if (error instanceof RpcAbortError) {
+    return { retry: false, delayMs: 0, reason: 'aborted' };
+  }
+
+  if (error instanceof MalformedRpcResponseError) {
+    return { retry: false, delayMs: 0, reason: 'malformed_rpc_response' };
+  }
+
+  let retryable = false;
+  let retryAfterHeader: string | null | undefined;
+
+  if (error instanceof RpcRequestError) {
+    retryable = error.retryable;
+    if (typeof error.details['retryAfterHeader'] === 'string') {
+      retryAfterHeader = error.details['retryAfterHeader'];
+    }
+  } else if (error instanceof RpcTimeoutError) {
+    retryable = true;
+  } else if (error instanceof TypeError) {
+    retryable = true;
+  } else {
+    retryable = true;
+  }
+
+  if (!retryable) {
+    return { retry: false, delayMs: 0, reason: 'non_retryable_error' };
+  }
+
+  const nowMs = policy.now ? policy.now() : Date.now();
+  const retryAfterMs = parseRetryAfter(retryAfterHeader, nowMs);
+
+  if (retryAfterMs !== undefined) {
+    const cap = policy.maxRetryAfterMs ?? policy.maxDelayMs;
+    const cappedDelay = Math.min(retryAfterMs, cap);
+    return { retry: true, delayMs: cappedDelay, reason: 'retry_after' };
+  }
+
+  const rawDelay = policy.initialDelayMs * Math.pow(policy.backoffFactor, attempt);
+  const cappedBackoff = Math.min(rawDelay, policy.maxDelayMs);
+
+  const random = policy.random ?? Math.random;
+  let finalDelay = cappedBackoff;
+
+  if (typeof policy.jitter === 'function') {
+    finalDelay = policy.jitter(cappedBackoff, attempt);
+  } else if (policy.jitter === 'full' || policy.jitter === true) {
+    finalDelay = random() * cappedBackoff;
+  } else if (policy.jitter === 'equal') {
+    finalDelay = cappedBackoff / 2 + random() * (cappedBackoff / 2);
+  } else {
+    finalDelay = cappedBackoff;
+  }
+
+  finalDelay = Math.min(Math.max(0, Math.round(finalDelay)), policy.maxDelayMs);
+  return { retry: true, delayMs: finalDelay, reason: 'exponential_backoff' };
+}
+
+function resolvePolicy(options: RpcClientOptions): ResolvedRetryPolicy {
+  const retry = options.retry;
+  const maxRetries =
+    retry?.maxRetries ??
+    (retry?.maxAttempts !== undefined ? Math.max(0, retry.maxAttempts - 1) : undefined) ??
+    options.retries ??
+    3;
+
+  const initialDelayMs = retry?.initialDelayMs ?? options.retryDelayMs ?? 200;
+  const maxDelayMs = retry?.maxDelayMs ?? 30_000;
+  const backoffFactor = retry?.backoffFactor ?? 2;
+  const maxRetryAfterMs = retry?.maxRetryAfterMs ?? 60_000;
+  const jitter = retry?.jitter ?? 'none';
+  const timeoutMs = retry?.timeoutMs ?? options.timeoutMs;
+  const sleep = retry?.sleep ?? options.sleep ?? defaultSleep;
+  const now = retry?.now ?? (() => Date.now());
+  const random = retry?.random ?? (() => Math.random());
+
+  return {
+    maxRetries,
+    initialDelayMs,
+    maxDelayMs,
+    backoffFactor,
+    jitter,
+    timeoutMs,
+    maxRetryAfterMs,
+    sleep,
+    now,
+    random,
+  };
+}
+
+function isAbortError(error: unknown): boolean {
+  if (error instanceof RpcAbortError) return true;
+  if (error instanceof Error) {
+    return error.name === 'AbortError' || error.name === 'TimeoutError';
+  }
+  return false;
 }
 
 export class StellarRpcEventSource implements EventSource {
   private readonly requestFetch: typeof fetch;
-  private readonly retries: number;
-  private readonly retryDelayMs: number;
+  private readonly policy: ResolvedRetryPolicy;
   private requestId = 0;
 
   constructor(
@@ -18,8 +210,7 @@ export class StellarRpcEventSource implements EventSource {
     options: RpcClientOptions = {},
   ) {
     this.requestFetch = options.fetch ?? globalThis.fetch;
-    this.retries = options.retries ?? 3;
-    this.retryDelayMs = options.retryDelayMs ?? 200;
+    this.policy = resolvePolicy(options);
   }
 
   async health(): Promise<RpcHealth> {
@@ -51,56 +242,138 @@ export class StellarRpcEventSource implements EventSource {
   }
 
   private async call(method: string, params: Record<string, unknown>): Promise<unknown> {
+    const policy = this.policy;
     let lastError: unknown;
-    for (let attempt = 0; attempt <= this.retries; attempt += 1) {
+
+    for (let attempt = 0; attempt <= policy.maxRetries; attempt += 1) {
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      let timedOut = false;
+      const controller = new AbortController();
+
       try {
-        const response = await this.requestFetch(this.rpcUrl, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', id: ++this.requestId, method, params }),
-        });
-        if (!response.ok) {
-          throw new RpcRequestError(`RPC returned HTTP ${response.status}`, response.status >= 500);
-        }
-        const body: unknown = await response.json();
-        if (!isRecord(body)) throw new MalformedRpcResponseError('RPC body is not an object');
-        if (body.error !== undefined) {
-          let rpcCode: number | undefined;
-          let errorMessage = `RPC ${method} returned an error`;
-          if (isRecord(body.error)) {
-            if (typeof body.error.code === 'number') {
-              rpcCode = body.error.code;
-            }
-            if (body.error.message !== undefined) {
-              errorMessage = sanitizeRpcErrorMessage(body.error.message);
-            }
-          } else {
-            errorMessage = sanitizeRpcErrorMessage(body.error);
+        const fetchPromise = (async () => {
+          const response = await this.requestFetch(this.rpcUrl, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: ++this.requestId, method, params }),
+            signal: controller.signal,
+          });
+
+          if (!response.ok) {
+            const retryAfterHeader = response.headers.get('retry-after');
+            const retryable = isRetryableStatus(response.status);
+            throw new RpcRequestError(`RPC returned HTTP ${response.status}`, retryable, {
+              status: response.status,
+              retryAfterHeader: retryAfterHeader ?? undefined,
+              method,
+            });
           }
-          throw new RpcRequestError(errorMessage, false, rpcCode);
+
+          const body: unknown = await response.json();
+          if (!isRecord(body)) throw new MalformedRpcResponseError('RPC body is not an object');
+          if (body.error !== undefined) {
+            const rpcError = isRecord(body.error) ? body.error : undefined;
+            const rpcCode = typeof rpcError?.code === 'number' ? rpcError.code : undefined;
+            const errorMessage = sanitizeRpcErrorMessage(rpcError?.message ?? body.error, method);
+            throw new RpcRequestError(errorMessage, false, {
+              ...(rpcCode === undefined ? {} : { rpcCode }),
+              method,
+            });
+          }
+          if (!('result' in body)) throw new MalformedRpcResponseError('RPC body has no result');
+          return body.result;
+        })();
+
+        let result: unknown;
+        if (policy.timeoutMs !== undefined && policy.timeoutMs > 0) {
+          const timeoutMs = policy.timeoutMs;
+          let completed = false;
+
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            const onTimeout = () => {
+              if (completed) return;
+              timedOut = true;
+              controller.abort();
+              reject(
+                new RpcTimeoutError(`RPC request timed out after ${timeoutMs}ms`, {
+                  timeoutMs,
+                  attempt,
+                  method,
+                }),
+              );
+            };
+
+            if (policy.sleep !== defaultSleep) {
+              policy.sleep(timeoutMs).then(onTimeout);
+            } else {
+              timeoutId = setTimeout(onTimeout, timeoutMs);
+            }
+          });
+
+          result = await Promise.race([fetchPromise, timeoutPromise]);
+          completed = true;
+          if (timeoutId !== undefined) clearTimeout(timeoutId);
+        } else {
+          result = await fetchPromise;
         }
-        if (!('result' in body)) throw new MalformedRpcResponseError('RPC body has no result');
-        return body.result;
+
+        return result;
       } catch (error) {
-        lastError = error;
-        const retryable = !(error instanceof RpcRequestError) || error.retryable;
-        if (!retryable || attempt === this.retries) break;
-        await new Promise((resolve) => setTimeout(resolve, this.retryDelayMs * 2 ** attempt));
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+
+        let effectiveError = error;
+        if (timedOut || isAbortError(error)) {
+          if (timedOut) {
+            effectiveError =
+              error instanceof RpcTimeoutError
+                ? error
+                : new RpcTimeoutError(
+                    `RPC request timed out after ${policy.timeoutMs ?? 0}ms`,
+                    { timeoutMs: policy.timeoutMs, attempt, method },
+                    { cause: error },
+                  );
+          } else {
+            effectiveError = new RpcAbortError(
+              'RPC request aborted',
+              { attempt, method },
+              { cause: error },
+            );
+          }
+        }
+
+        lastError = effectiveError;
+
+        if (attempt >= policy.maxRetries) {
+          break;
+        }
+
+        const decision = evaluateRetry(policy, attempt, effectiveError);
+        if (!decision.retry) {
+          break;
+        }
+
+        if (decision.delayMs > 0) {
+          await policy.sleep(decision.delayMs);
+        }
       }
     }
+
     if (lastError instanceof Error) throw lastError;
     throw new RpcRequestError('RPC request failed', false);
   }
 }
 
-function sanitizeRpcErrorMessage(rawMessage: unknown): string {
-  const text = typeof rawMessage === 'string' ? rawMessage : String(rawMessage ?? 'Unknown error');
-  const cleaned = text.replace(/[\x00-\x1F\x7F]/g, '');
-  const bounded = cleaned.length > 200 ? cleaned.slice(0, 197) + '...' : cleaned;
-  return bounded
-    .replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]')
-    .replace(/token[=:][\s\"']*[a-zA-Z0-9_\-\.]+/gi, 'token=[REDACTED]')
-    .replace(/password[=:][\s\"']*[^\s\"']+/gi, 'password=[REDACTED]');
+function sanitizeRpcErrorMessage(rawMessage: unknown, method: string): string {
+  const fallback = `RPC ${method} returned an error`;
+  const text = typeof rawMessage === 'string' ? rawMessage : fallback;
+  // Control bytes are never useful in operator-facing diagnostics.
+  // eslint-disable-next-line no-control-regex
+  const cleaned = text.replace(/[\u0000-\u001f\u007f]/g, '');
+  const redacted = cleaned
+    .replace(/bearer\s+[a-zA-Z0-9_.-]+/gi, 'Bearer [REDACTED]')
+    .replace(/token[=:][\s"']*[a-zA-Z0-9_.-]+/gi, 'token=[REDACTED]')
+    .replace(/password[=:][\s"']*[^\s"']+/gi, 'password=[REDACTED]');
+  return redacted.length > 200 ? `${redacted.slice(0, 197)}...` : redacted || fallback;
 }
 
 function parseEvent(value: unknown): StellarEvent {
