@@ -20,6 +20,7 @@ export interface FetchRequest {
   startLedger?: number;
   cursor?: string;
   limit?: number;
+  contractId?: string;
 }
 
 export interface EventPage {
