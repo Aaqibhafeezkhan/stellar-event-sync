@@ -21,6 +21,25 @@ test('formats the versioned sync diagnostic envelope', () => {
   );
 });
 
+test('serializes page-limit incompleteness and its configured limit', () => {
+  const limitedResult: SyncResult = {
+    ...result,
+    state: 'incomplete-page-limit',
+    pageLimit: 2,
+    checkpointCursor: 'cursor-2',
+  };
+
+  assert.deepEqual(JSON.parse(formatSyncResultJson(limitedResult)), {
+    formatVersion: 1,
+    source: 'stellar-testnet',
+    state: 'incomplete-page-limit',
+    pageLimit: 2,
+    pages: 2,
+    events: { received: 7, inserted: 5, duplicates: 2 },
+    checkpoint: { cursor: 'cursor-2', nextLedger: 12345 },
+  });
+});
+
 test('does not serialize raw events or secret-bearing fields', () => {
   const resultWithRawEvent = {
     ...result,

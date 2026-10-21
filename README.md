@@ -26,6 +26,7 @@ by Stellar event ID, and commits each page's events and checkpoint in one SQLite
 - Atomic SQLite event and checkpoint commits
 - Restart from the last committed opaque cursor
 - Explicit `INCOMPLETE_HISTORY` detection
+- Explicit incomplete results when a per-run page limit is reached
 - Contract filtering on initial range requests
 - Configurable retry, timeout, jitter, and `Retry-After` handling
 - Local validation of RPC endpoint URLs and `getEvents` page limits
@@ -84,6 +85,12 @@ try {
   store.close();
 }
 ```
+
+`maxPages` is a positive integer (default `1,000`) that bounds the work performed by one call.
+When the final allowed page still has a continuation cursor, `synchronize` commits that page and
+returns `state: 'incomplete-page-limit'` with the configured `pageLimit`; it does not request the
+next page or report a complete synchronization. Calling `synchronize` again resumes from the saved
+cursor. A terminal page reached exactly at the limit still returns `state: 'complete'`.
 
 ## Development
 
