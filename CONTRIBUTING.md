@@ -40,6 +40,7 @@ accessibility, and isolated RPC validation. Avoid combining these workstreams in
 - Update public documentation when APIs, errors, configuration, or guarantees change.
 - Include screenshots at desktop and 390px for visible website changes.
 - Confirm that logs, fixtures, and screenshots contain no secrets or private endpoints.
+- Run the diagnostics CLI to confirm it works after your changes: `npm run example` or `npx tsx scripts/diagnostics.ts --help`
 
 ## Pull-request review criteria
 
