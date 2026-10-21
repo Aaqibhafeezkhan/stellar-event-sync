@@ -18,6 +18,16 @@ function response(body: unknown, status = 200, headers: Record<string, string> =
   });
 }
 
+const validEvent = {
+  id: 'event-1',
+  ledger: 2,
+  ledgerClosedAt: '2026-01-01T00:00:00Z',
+  topic: ['topic'],
+  value: 'value',
+  txHash: 'tx-hash',
+  type: 'contract',
+};
+
 test('retries a transient HTTP failure without changing the request', async () => {
   const bodies: string[] = [];
   let attempts = 0;
@@ -39,15 +49,78 @@ test('retries a transient HTTP failure without changing the request', async () =
   assert.equal(first.method, second.method);
 });
 
-test('rejects malformed event responses', async () => {
-  const source = new StellarRpcEventSource('https://rpc.invalid', {
-    retries: 0,
-    fetch: async () => response({ result: { latestLedger: 2, events: [{ id: 'bad' }] } }),
-  });
-  await assert.rejects(
-    source.fetch({ startLedger: 1 }),
-    (error) => error instanceof MalformedRpcResponseError,
-  );
+test('rejects malformed RPC response shapes without echoing payloads', async () => {
+  const payloadMarker = 'fixture-payload-must-not-be-echoed';
+  const fixtures: Array<{ name: string; body: unknown; message: string }> = [
+    { name: 'null body', body: null, message: 'RPC body is not an object' },
+    { name: 'array body', body: [], message: 'RPC body is not an object' },
+    { name: 'missing result', body: { jsonrpc: '2.0' }, message: 'RPC body has no result' },
+    {
+      name: 'non-object result',
+      body: { result: payloadMarker },
+      message: 'getEvents result has no events array',
+    },
+    {
+      name: 'missing events array',
+      body: { result: { latestLedger: 2, cursor: payloadMarker } },
+      message: 'getEvents result has no events array',
+    },
+    {
+      name: 'missing page ledger metadata',
+      body: { result: { events: [validEvent], cursor: payloadMarker } },
+      message: 'latestLedger must be an integer',
+    },
+    {
+      name: 'unsafe page ledger',
+      body: { result: { latestLedger: Number.MAX_SAFE_INTEGER + 1, events: [] } },
+      message: 'latestLedger must be an integer',
+    },
+    {
+      name: 'wrong topic type',
+      body: {
+        result: {
+          latestLedger: 2,
+          events: [{ ...validEvent, topic: { payloadMarker } }],
+        },
+      },
+      message: 'Event topic is invalid',
+    },
+    {
+      name: 'wrong value type',
+      body: {
+        result: {
+          latestLedger: 2,
+          events: [{ ...validEvent, value: { payloadMarker } }],
+        },
+      },
+      message: 'value must be a string',
+    },
+    {
+      name: 'invalid event type',
+      body: {
+        result: {
+          latestLedger: 2,
+          events: [{ ...validEvent, type: 'unsupported' }],
+        },
+      },
+      message: 'Event type is invalid',
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    const source = new StellarRpcEventSource('https://rpc.invalid', {
+      retries: 0,
+      fetch: async () => response(fixture.body),
+    });
+
+    await assert.rejects(source.fetch({ startLedger: 1 }), (error) => {
+      assert.ok(error instanceof MalformedRpcResponseError, fixture.name);
+      assert.equal(error.code, 'MALFORMED_RPC_RESPONSE', fixture.name);
+      assert.match(error.message, new RegExp(fixture.message), fixture.name);
+      assert.doesNotMatch(error.message, new RegExp(payloadMarker), fixture.name);
+      return true;
+    });
+  }
 });
 
 test('honors Retry-After in decimal seconds bounded by configured cap', async () => {
