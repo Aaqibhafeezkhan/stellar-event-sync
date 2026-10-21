@@ -1,4 +1,9 @@
-import { SqliteEventStore, StellarRpcEventSource, synchronize } from '../src/index.js';
+import {
+  formatSyncResultJson,
+  SqliteEventStore,
+  StellarRpcEventSource,
+  synchronize,
+} from '../src/index.js';
 
 const rpcUrl = process.env.STELLAR_RPC_URL ?? 'https://soroban-testnet.stellar.org';
 const source = new StellarRpcEventSource(rpcUrl);
@@ -11,7 +16,8 @@ try {
     startLedger: health.latestLedger,
     maxPages: 10,
   });
-  console.log(JSON.stringify(result, null, 2));
+  process.stderr.write('sync complete\n');
+  process.stdout.write(`${formatSyncResultJson(result)}\n`);
 } finally {
   store.close();
 }
