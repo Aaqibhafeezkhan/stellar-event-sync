@@ -16,7 +16,11 @@
     "check": "tsc --noEmit && eslint . && prettier --check .",
     "format": "prettier --write .",
     "test": "npm run build && node --test dist/test/*.test.js",
-    "example": "npm run build && node dist/examples/sync.js"
+    "example": "npm run build && node dist/examples/sync.js",
+    "diagnostics": "npm run build && node dist/src/cli/index.js"
+  },
+  "bin": {
+    "stellar-event-sync-diagnostics": "dist/src/cli/index.js"
   },
   "license": "MIT",
   "dependencies": {},

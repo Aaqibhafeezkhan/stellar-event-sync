@@ -90,6 +90,21 @@ The tests map directly to KT-01 through KT-04 and include malformed-response and
 [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. Use the issue forms to report a
 bug or propose a feature; security reports follow [SECURITY.md](SECURITY.md).
 
+## Diagnostics
+
+The read-only diagnostics command checks RPC health and compares it with a local checkpoint. It
+never syncs, writes to SQLite, or sends event mutations. It requires an HTTP(S) URL and rejects URL
+credentials. Human output goes to stdout for healthy results and stderr for failures; `--json`
+emits a versioned report on stdout. URL credentials, query strings, and fragments are redacted.
+
+```bash
+npx stellar-event-sync-diagnostics --rpc-url https://soroban-testnet.stellar.org --store events.sqlite
+npx stellar-event-sync-diagnostics --rpc-url https://soroban-testnet.stellar.org --store events.sqlite --json
+```
+
+Exit codes are `0` healthy, `2` incomplete history, `3` malformed RPC response, `4` network
+failure, and `64` invalid arguments. Do not put secret headers or tokens on the command line.
+
 ## Relevant Stellar documentation
 
 - [RPC `getEvents`](https://developers.stellar.org/docs/data/apis/rpc/api-reference/methods/getEvents)
