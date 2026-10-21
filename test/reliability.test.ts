@@ -50,7 +50,7 @@ class FixtureSource implements EventSource {
 }
 
 function store(): SqliteEventStore {
-  return new SqliteEventStore(join(mkdtempSync(join(tmpdir(), 'event-guard-')), 'events.sqlite'));
+  return new SqliteEventStore(join(mkdtempSync(join(tmpdir(), 'event-sync-')), 'events.sqlite'));
 }
 
 test('KT-01: duplicate delivery persists each event once', async () => {
