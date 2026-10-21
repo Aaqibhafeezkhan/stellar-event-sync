@@ -31,7 +31,18 @@ export class RpcRequestError extends EventSyncError {
     message: string,
     readonly retryable: boolean,
     options?: ErrorOptions,
+    readonly rpcCode?: number,
+    readonly rpcMessage?: string,
   ) {
-    super(message, 'RPC_REQUEST_FAILED', { retryable }, options);
+    super(
+      message,
+      'RPC_REQUEST_FAILED',
+      {
+        retryable,
+        ...(rpcCode === undefined ? {} : { rpcCode }),
+        ...(rpcMessage === undefined ? {} : { rpcMessage }),
+      },
+      options,
+    );
   }
 }

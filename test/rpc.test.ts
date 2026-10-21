@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MalformedRpcResponseError, StellarRpcEventSource } from '../src/index.js';
+import { MalformedRpcResponseError, RpcRequestError, StellarRpcEventSource } from '../src/index.js';
 
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -39,4 +39,57 @@ test('rejects malformed event responses', async () => {
     source.fetch({ startLedger: 1 }),
     (error) => error instanceof MalformedRpcResponseError,
   );
+});
+
+test('retains a numeric RPC code and sanitized message without retrying', async () => {
+  const source = new StellarRpcEventSource('https://rpc.invalid', {
+    retries: 3,
+    retryDelayMs: 0,
+    fetch: async () =>
+      response({ error: { code: -32602, message: 'invalid params\nfor request' } }),
+  });
+  await assert.rejects(
+    source.health(),
+    (error) =>
+      error instanceof RpcRequestError &&
+      error.code === 'RPC_REQUEST_FAILED' &&
+      error.rpcCode === -32602 &&
+      error.rpcMessage === 'invalid params for request' &&
+      error.message === error.rpcMessage &&
+      !error.retryable,
+  );
+});
+
+test('bounds oversized RPC messages', async () => {
+  const source = new StellarRpcEventSource('https://rpc.invalid', {
+    retries: 0,
+    fetch: async () => response({ error: { code: 1, message: 'x'.repeat(1000) } }),
+  });
+  await assert.rejects(
+    source.health(),
+    (error) => error instanceof RpcRequestError && error.rpcMessage?.length === 256,
+  );
+});
+
+test('does not expose malformed or credential-like error data', async () => {
+  const fixtures = [
+    { error: 'malformed error' },
+    { error: { code: 'not numeric', data: { password: 'super-secret' } } },
+    { error: { message: 'authorization=top-secret bearer abc123' } },
+  ];
+  for (const fixture of fixtures) {
+    const source = new StellarRpcEventSource('https://rpc.invalid', {
+      retries: 0,
+      fetch: async () => response(fixture),
+    });
+    await assert.rejects(
+      source.health(),
+      (error) =>
+        error instanceof RpcRequestError &&
+        error.rpcCode === undefined &&
+        !error.message.includes('super-secret') &&
+        !error.message.includes('top-secret') &&
+        !error.message.includes('abc123'),
+    );
+  }
 });

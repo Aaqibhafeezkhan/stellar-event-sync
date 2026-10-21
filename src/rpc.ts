@@ -65,7 +65,19 @@ export class StellarRpcEventSource implements EventSource {
         const body: unknown = await response.json();
         if (!isRecord(body)) throw new MalformedRpcResponseError('RPC body is not an object');
         if (body.error !== undefined) {
-          throw new RpcRequestError(`RPC ${method} returned an error`, false);
+          const rpcError = isRecord(body.error) ? body.error : {};
+          const rpcCode =
+            typeof rpcError.code === 'number' && Number.isFinite(rpcError.code)
+              ? rpcError.code
+              : undefined;
+          const rpcMessage = sanitizeRpcMessage(rpcError.message);
+          throw new RpcRequestError(
+            rpcMessage ?? `RPC ${method} returned an error`,
+            false,
+            undefined,
+            rpcCode,
+            rpcMessage,
+          );
         }
         if (!('result' in body)) throw new MalformedRpcResponseError('RPC body has no result');
         return body.result;
@@ -79,6 +91,22 @@ export class StellarRpcEventSource implements EventSource {
     if (lastError instanceof Error) throw lastError;
     throw new RpcRequestError('RPC request failed', false);
   }
+}
+
+const MAX_RPC_MESSAGE_LENGTH = 256;
+
+function sanitizeRpcMessage(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const sanitized = value
+    .replace(/\p{Cc}/gu, ' ')
+    .replace(
+      /\b(?:authorization|password|secret|token|api[-_ ]?key)\s*[:=]\s*[^\s,;]+/gi,
+      '[redacted]',
+    )
+    .replace(/\bbearer\s+[^\s,;]+/gi, 'Bearer [redacted]')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return sanitized.slice(0, MAX_RPC_MESSAGE_LENGTH) || undefined;
 }
 
 function parseEvent(value: unknown): StellarEvent {
