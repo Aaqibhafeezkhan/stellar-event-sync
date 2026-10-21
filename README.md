@@ -48,7 +48,12 @@ The example starts at the current Testnet ledger and writes `stellar-events.sqli
 endpoint with `STELLAR_RPC_URL`. It does not submit transactions or require a secret key.
 
 ```ts
-import { SqliteEventStore, StellarRpcEventSource, synchronize } from 'stellar-event-sync';
+import {
+  formatSyncResultJson,
+  SqliteEventStore,
+  StellarRpcEventSource,
+  synchronize,
+} from 'stellar-event-sync';
 
 const rpc = new StellarRpcEventSource('https://soroban-testnet.stellar.org');
 const health = await rpc.health();
@@ -59,9 +64,15 @@ const result = await synchronize(rpc, store, {
   startLedger: health.latestLedger,
 });
 
-console.log(result);
+process.stderr.write('sync complete\n');
+process.stdout.write(`${formatSyncResultJson(result)}\n`);
 store.close();
 ```
+
+`formatSyncResultJson` emits one versioned JSON document containing the source label, state, page
+and event counters, and checkpoint position. It intentionally excludes event payloads and secrets.
+The current envelope has `formatVersion: 1`; integer `bigint` values are encoded as decimal JSON
+strings. Keep logs on stderr so stdout remains safe for automation.
 
 ## Architecture
 
