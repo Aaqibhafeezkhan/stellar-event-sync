@@ -59,6 +59,20 @@ SECURITY.md.
 Releases follow Semantic Versioning. Until 1.0, minor releases may contain documented API changes.
 Release notes must list behavior changes, migrations, and known limitations.
 
+## Changelog entries
+
+Update [CHANGELOG.md](CHANGELOG.md) when a pull request changes user-visible behavior,
+configuration, diagnostics, security, or upgrade requirements. Add a concise entry under
+`Unreleased`, using the Keep a Changelog categories `Added`, `Changed`, `Deprecated`,
+`Removed`, `Fixed`, and `Security` as applicable. Omit empty categories.
+
+For a breaking change, state what changed and include migration steps, prerequisites,
+compatibility notes, and any known limitations. If no migration is necessary, say so.
+Do not invent release dates or backfill changes that cannot be verified from repository
+history. When preparing an actual release, move relevant entries into a dated version
+section, confirm its SemVer impact, and link the release to its verifiable changes.
+Do not publish or tag a release as part of an unrelated contribution.
+
 ## Contributor FAQ
 
 **Can I open a pull request without assignment?** Small typo fixes are welcome, but comment first

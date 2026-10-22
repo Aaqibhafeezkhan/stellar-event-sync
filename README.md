@@ -5,7 +5,7 @@ own durable storage.
 
 [Documentation](https://stellar-event-sync.vercel.app/docs) ·
 [Good first issues](https://github.com/Webghost01-NG/stellar-event-sync/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) ·
-[Contribution guide](CONTRIBUTING.md) · [Security](SECURITY.md)
+[Contribution guide](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md)
 
 > Experimental MVP: the API may change before 1.0. This project is independent and is not affiliated
 > with the Stellar Development Foundation, Drips, or Tiger Waves.
