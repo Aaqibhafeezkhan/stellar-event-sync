@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 import { MalformedRpcResponseError } from '../errors.js';
+import { redactSecrets, redactUrl } from '../redaction.js';
 import type { EventSource, RpcHealth } from '../types.js';
 
 export const DIAGNOSTICS_EXIT_CODES = {
@@ -57,7 +58,16 @@ export async function runDiagnostics(options: DiagnosticOptions): Promise<number
       endpoint,
       source: redactSource(options.source),
       health,
-      ...(checkpoint === undefined ? {} : { checkpoint }),
+      ...(checkpoint === undefined
+        ? {}
+        : {
+            checkpoint: {
+              ...checkpoint,
+              ...(checkpoint.cursor === undefined
+                ? {}
+                : { cursor: redactSecrets(checkpoint.cursor) }),
+            },
+          }),
     };
   } catch (error) {
     report = failureReport(endpoint, options.source, error);
@@ -85,17 +95,7 @@ export async function runDiagnostics(options: DiagnosticOptions): Promise<number
   return exitCode(report.status);
 }
 
-export function redactUrl(value: string): string {
-  try {
-    const url = new URL(value);
-    url.username = url.password = '';
-    url.search = '';
-    url.hash = '';
-    return url.toString();
-  } catch {
-    return '[invalid-url]';
-  }
-}
+export { redactUrl };
 
 export function validateRpcUrl(value: string): void {
   const url = new URL(value);
@@ -138,13 +138,13 @@ function failureReport(endpoint: string, source: string, error: unknown): Diagno
     source: redactSource(source),
     error: {
       code: typed ? 'MALFORMED_RPC_RESPONSE' : 'RPC_REQUEST_FAILED',
-      message: error instanceof Error ? error.message : 'RPC request failed',
+      message: redactSecrets(error instanceof Error ? error.message : 'RPC request failed'),
     },
   };
 }
 
 function redactSource(value: string): string {
-  return value.includes('://') ? redactUrl(value) : value;
+  return value.includes('://') ? redactUrl(value) : redactSecrets(value);
 }
 
 function exitCode(status: DiagnosticReport['status']): number {

@@ -128,7 +128,11 @@ No rewards, program admission, or funding are guaranteed.
 
 RPC endpoint URLs must not embed credentials. `StellarRpcEventSource` rejects URL userinfo with a
 typed `RpcConfigurationError` before any request and exposes only the credential-free `origin` for
-diagnostics. Use provider-supported header authentication, for example through a custom `fetch`
+diagnostics. Diagnostic output removes URL userinfo, query parameters, fragments, bearer values,
+JWT-like strings, common provider-token prefixes, and values assigned to credential-like keys.
+This is best-effort redaction, not a guarantee that every provider's secret format is recognized;
+applications should avoid placing credentials in endpoint URLs, source labels, cursors, or error
+messages. Use provider-supported header authentication, for example through a custom `fetch`
 wrapper. `getEvents` page limits must be integers from 1 to 10,000; `synchronize` validates
 `pageSize` before reading RPC health.
 

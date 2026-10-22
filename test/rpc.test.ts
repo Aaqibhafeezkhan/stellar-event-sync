@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { SECRET_REDACTION_CASES } from './fixtures/secret-redaction.js';
 import {
   evaluateRetry,
   isRetryableStatus,
@@ -649,5 +650,23 @@ test('serializes minimum, maximum, and default page limits', async () => {
 
     await source.fetch({ startLedger: 1, ...(limit === undefined ? {} : { limit }) });
     assert.equal(JSON.parse(body).params.pagination.limit, expected);
+  }
+});
+
+test('redacts the shared synthetic secret corpus from RPC error messages', async () => {
+  for (const fixture of SECRET_REDACTION_CASES) {
+    const source = new StellarRpcEventSource('https://rpc.invalid', {
+      retries: 0,
+      fetch: async () => response({ error: { code: -32000, message: fixture.input } }),
+    });
+
+    await assert.rejects(source.health(), (error) => {
+      assert.ok(error instanceof RpcRequestError, fixture.name);
+      for (const sentinel of fixture.sentinels) {
+        assert.ok(!error.message.includes(sentinel), `${fixture.name} leaked ${sentinel}`);
+      }
+      assert.ok(error.message.includes('[REDACTED]'), fixture.name);
+      return true;
+    });
   }
 });

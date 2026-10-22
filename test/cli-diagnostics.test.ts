@@ -7,6 +7,7 @@ import {
 } from '../src/cli/diagnostics.js';
 import { MalformedRpcResponseError, RpcRequestError } from '../src/errors.js';
 import type { EventSource, RpcHealth } from '../src/types.js';
+import { SECRET_REDACTION_CASES } from './fixtures/secret-redaction.js';
 
 const health: RpcHealth = { oldestLedger: 100, latestLedger: 120, ledgerRetentionWindow: 21 };
 
@@ -113,5 +114,34 @@ test('diagnostics distinguishes malformed responses and network failures', async
     });
     assert.equal(actual, code);
     assert.equal(JSON.parse(streams.stdout).status, status);
+  }
+});
+
+test('redacts the shared synthetic secret corpus from JSON failure diagnostics', async () => {
+  for (const fixture of SECRET_REDACTION_CASES) {
+    const streams = output();
+    const code = await runDiagnostics({
+      rpcUrl:
+        'https://sentinel-endpoint-user:sentinel-endpoint-password@rpc.example.test/rpc?api_key=sentinel-endpoint-key#sentinel-endpoint-fragment',
+      source: 'fixture',
+      eventSource: new FakeSource(new RpcRequestError(fixture.input, false)),
+      checkpoints: new FakeCheckpoints(),
+      json: true,
+      stdout: { write: streams.writeStdout.bind(streams) },
+      stderr: { write: streams.writeStderr.bind(streams) },
+    });
+    assert.equal(code, DIAGNOSTICS_EXIT_CODES.networkFailure, fixture.name);
+    const serialized = streams.stdout;
+    assert.equal(JSON.parse(serialized).endpoint, 'https://rpc.example.test/rpc');
+    for (const sentinel of [
+      ...fixture.sentinels,
+      'sentinel-endpoint-user',
+      'sentinel-endpoint-password',
+      'sentinel-endpoint-key',
+      'sentinel-endpoint-fragment',
+    ]) {
+      assert.ok(!serialized.includes(sentinel), `${fixture.name} leaked ${sentinel}`);
+    }
+    assert.equal(streams.stderr, '');
   }
 });

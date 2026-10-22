@@ -1,3 +1,4 @@
+import { redactSecrets } from './redaction.js';
 import type { SyncResult } from './types.js';
 
 export const SYNC_RESULT_FORMAT_VERSION = 1 as const;
@@ -23,7 +24,7 @@ export interface SyncResultDiagnostic {
 export function formatSyncResultJson(result: SyncResult): string {
   const diagnostic: SyncResultDiagnostic = {
     formatVersion: SYNC_RESULT_FORMAT_VERSION,
-    source: result.source,
+    source: redactSecrets(result.source),
     state: result.state,
     ...(result.state === 'incomplete-page-limit'
       ? { pageLimit: jsonInteger(result.pageLimit) }
@@ -35,7 +36,8 @@ export function formatSyncResultJson(result: SyncResult): string {
       duplicates: jsonInteger(result.duplicates),
     },
     checkpoint: {
-      cursor: result.checkpointCursor ?? null,
+      cursor:
+        result.checkpointCursor === undefined ? null : redactSecrets(result.checkpointCursor),
       nextLedger: jsonInteger(result.nextLedger),
     },
   };

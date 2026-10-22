@@ -1,3 +1,4 @@
+import { redactSecrets } from './redaction.js';
 import {
   MalformedRpcResponseError,
   RpcAbortError,
@@ -432,10 +433,7 @@ function sanitizeRpcErrorMessage(rawMessage: unknown, method: string): string {
   // Control bytes are never useful in operator-facing diagnostics.
   // eslint-disable-next-line no-control-regex
   const cleaned = text.replace(/[\u0000-\u001f\u007f]/g, '');
-  const redacted = cleaned
-    .replace(/bearer\s+[a-zA-Z0-9_.-]+/gi, 'Bearer [REDACTED]')
-    .replace(/token[=:][\s"']*[a-zA-Z0-9_.-]+/gi, 'token=[REDACTED]')
-    .replace(/password[=:][\s"']*[^\s"']+/gi, 'password=[REDACTED]');
+  const redacted = redactSecrets(cleaned);
   return redacted.length > 200 ? `${redacted.slice(0, 197)}...` : redacted || fallback;
 }
 

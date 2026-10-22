@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { formatSyncResultJson } from '../src/diagnostics.js';
 import type { SyncResult } from '../src/types.js';
+import { redactSecrets } from '../src/redaction.js';
+import { SECRET_REDACTION_CASES } from './fixtures/secret-redaction.js';
 
 const result: SyncResult = {
   source: 'stellar-testnet',
@@ -84,5 +86,32 @@ test('rejects unsafe numeric counters instead of rounding them', () => {
   assert.throws(
     () => formatSyncResultJson({ ...result, nextLedger: Number.MAX_SAFE_INTEGER + 1 }),
     /safe integers/,
+  );
+});
+
+test('redacts the shared synthetic secret corpus', () => {
+  for (const fixture of SECRET_REDACTION_CASES) {
+    const output = redactSecrets(fixture.input);
+    assert.equal(output, fixture.expected, fixture.name);
+    for (const sentinel of fixture.sentinels) {
+      assert.ok(!output.includes(sentinel), `${fixture.name} leaked ${sentinel}`);
+    }
+  }
+});
+
+test('redacts secrets in versioned JSON diagnostic source and cursor fields', () => {
+  const output = JSON.parse(
+    formatSyncResultJson({
+      ...result,
+      source: 'source?api_key=sentinel-json-source-key',
+      checkpointCursor: 'Bearer sentinel-json-cursor-token',
+    }),
+  ) as { source: string; checkpoint: { cursor: string | null } };
+
+  assert.equal(output.source, 'source?api_key=[REDACTED]');
+  assert.equal(output.checkpoint.cursor, 'Bearer [REDACTED]');
+  assert.doesNotMatch(
+    JSON.stringify(output),
+    /sentinel-json-source-key|sentinel-json-cursor-token/,
   );
 });
