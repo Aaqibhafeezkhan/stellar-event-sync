@@ -11,7 +11,10 @@ export class EventSyncError extends Error {
 }
 
 export class IncompleteHistoryError extends EventSyncError {
-  constructor(requestedLedger: number, oldestAvailableLedger: number) {
+  constructor(
+    readonly requestedLedger: number | bigint,
+    readonly oldestAvailableLedger: number | bigint,
+  ) {
     super(
       `History is incomplete: ledger ${requestedLedger} is older than the RPC retention floor ${oldestAvailableLedger}`,
       'INCOMPLETE_HISTORY',

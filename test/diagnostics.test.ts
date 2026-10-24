@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatSyncResultJson } from '../src/diagnostics.js';
+import { formatIncompleteHistoryJson, formatSyncResultJson } from '../src/diagnostics.js';
+import { IncompleteHistoryError } from '../src/errors.js';
 import type { SyncResult } from '../src/types.js';
 import { redactSecrets } from '../src/redaction.js';
 import { SECRET_REDACTION_CASES } from './fixtures/secret-redaction.js';
@@ -113,5 +114,46 @@ test('redacts secrets in versioned JSON diagnostic source and cursor fields', ()
   assert.doesNotMatch(
     JSON.stringify(output),
     /sentinel-json-source-key|sentinel-json-cursor-token/,
+  );
+});
+
+test('serializes incomplete history as a stable recovery-neutral envelope', () => {
+  const output = formatIncompleteHistoryJson(new IncompleteHistoryError(100, 125));
+
+  assert.equal(
+    output,
+    '{"formatVersion":1,"code":"INCOMPLETE_HISTORY","state":"incomplete-history","history":{"requestedLedger":100,"oldestAvailableLedger":125},"recovery":{"automatic":false,"operatorActionRequired":true}}',
+  );
+});
+
+test('encodes incomplete-history bigint ledgers as decimal strings', () => {
+  assert.deepEqual(
+    JSON.parse(formatIncompleteHistoryJson(new IncompleteHistoryError(100n, 125n))),
+    {
+      formatVersion: 1,
+      code: 'INCOMPLETE_HISTORY',
+      state: 'incomplete-history',
+      history: { requestedLedger: '100', oldestAvailableLedger: '125' },
+      recovery: { automatic: false, operatorActionRequired: true },
+    },
+  );
+});
+
+test('does not serialize generic or secret-bearing error fields', () => {
+  const error = new IncompleteHistoryError(100, 125) as IncompleteHistoryError & {
+    endpoint: string;
+    event: unknown;
+  };
+  error.endpoint = 'https://rpc.example?api_key=sentinel-history-secret';
+  error.event = { raw: 'sentinel-history-event' };
+
+  const output = formatIncompleteHistoryJson(error);
+  assert.doesNotMatch(output, /sentinel-history-secret|sentinel-history-event|endpoint|event/);
+});
+
+test('rejects unsafe numeric ledgers in incomplete-history diagnostics', () => {
+  assert.throws(
+    () => formatIncompleteHistoryJson(new IncompleteHistoryError(Number.MAX_SAFE_INTEGER + 1, 125)),
+    /safe integers/,
   );
 });
