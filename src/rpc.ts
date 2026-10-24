@@ -430,10 +430,7 @@ export class StellarRpcEventSource implements EventSource {
 function sanitizeRpcErrorMessage(rawMessage: unknown, method: string): string {
   const fallback = `RPC ${method} returned an error`;
   const text = typeof rawMessage === 'string' ? rawMessage : fallback;
-  // Control bytes are never useful in operator-facing diagnostics.
-  // eslint-disable-next-line no-control-regex
-  const cleaned = text.replace(/[\u0000-\u001f\u007f]/g, '');
-  const redacted = redactSecrets(cleaned);
+  const redacted = redactSecrets(text);
   return redacted.length > 200 ? `${redacted.slice(0, 197)}...` : redacted || fallback;
 }
 

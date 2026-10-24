@@ -10,6 +10,7 @@ The repository currently declares `0.1.0` in `package.json`, but the project has
 
 ### Added
 
+- Added a versioned, recovery-neutral JSON serializer for incomplete-history errors.
 - Crash-consistent Stellar RPC event ingestion with event-ID deduplication, transactional SQLite event/checkpoint writes, and restartable cursors ([initial implementation](https://github.com/Webghost01-NG/stellar-event-sync/commit/0e3f9d45ba5a4da2138ad2a6a9e0742361ee7db3)).
 - Versioned synchronization diagnostics and a read-only diagnostics CLI ([diagnostic data](https://github.com/Webghost01-NG/stellar-event-sync/commit/26ff12cc3b7dc3258f8cfe4a23c9cfaec93facd4), [CLI](https://github.com/Webghost01-NG/stellar-event-sync/commit/006d4bbe0ae1c9fec50d62814614baacf77a19aa)).
 - Contract-ID filtering for initial event range requests ([implementation](https://github.com/Webghost01-NG/stellar-event-sync/commit/73f1c4ce54f9f25191aac4e5b5eb6cde05df2d82)).

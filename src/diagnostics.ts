@@ -1,7 +1,23 @@
 import { redactSecrets } from './redaction.js';
+import type { IncompleteHistoryError } from './errors.js';
 import type { SyncResult } from './types.js';
 
 export const SYNC_RESULT_FORMAT_VERSION = 1 as const;
+export const INCOMPLETE_HISTORY_FORMAT_VERSION = 1 as const;
+
+export interface IncompleteHistoryDiagnostic {
+  formatVersion: typeof INCOMPLETE_HISTORY_FORMAT_VERSION;
+  code: 'INCOMPLETE_HISTORY';
+  state: 'incomplete-history';
+  history: {
+    requestedLedger: number | string;
+    oldestAvailableLedger: number | string;
+  };
+  recovery: {
+    automatic: false;
+    operatorActionRequired: true;
+  };
+}
 
 export interface SyncResultDiagnostic {
   formatVersion: typeof SYNC_RESULT_FORMAT_VERSION;
@@ -36,9 +52,27 @@ export function formatSyncResultJson(result: SyncResult): string {
       duplicates: jsonInteger(result.duplicates),
     },
     checkpoint: {
-      cursor:
-        result.checkpointCursor === undefined ? null : redactSecrets(result.checkpointCursor),
+      cursor: result.checkpointCursor === undefined ? null : redactSecrets(result.checkpointCursor),
       nextLedger: jsonInteger(result.nextLedger),
+    },
+  };
+
+  return JSON.stringify(diagnostic);
+}
+
+/** Serialize a retention gap without exposing generic error details or selecting a recovery strategy. */
+export function formatIncompleteHistoryJson(error: IncompleteHistoryError): string {
+  const diagnostic: IncompleteHistoryDiagnostic = {
+    formatVersion: INCOMPLETE_HISTORY_FORMAT_VERSION,
+    code: 'INCOMPLETE_HISTORY',
+    state: 'incomplete-history',
+    history: {
+      requestedLedger: jsonInteger(error.requestedLedger),
+      oldestAvailableLedger: jsonInteger(error.oldestAvailableLedger),
+    },
+    recovery: {
+      automatic: false,
+      operatorActionRequired: true,
     },
   };
 

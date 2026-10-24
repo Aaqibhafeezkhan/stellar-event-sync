@@ -665,7 +665,7 @@ test('redacts the shared synthetic secret corpus from RPC error messages', async
       for (const sentinel of fixture.sentinels) {
         assert.ok(!error.message.includes(sentinel), `${fixture.name} leaked ${sentinel}`);
       }
-      assert.ok(error.message.includes('[REDACTED]'), fixture.name);
+      assert.equal(error.message, fixture.expected, fixture.name);
       return true;
     });
   }
