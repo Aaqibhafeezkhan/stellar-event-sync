@@ -85,3 +85,9 @@ export class RpcAbortError extends EventSyncError {
     super(message, 'RPC_ABORTED', details, options);
   }
 }
+
+export class CheckpointInspectionError extends EventSyncError {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, 'CHECKPOINT_INSPECTION_FAILED', {}, options);
+  }
+}

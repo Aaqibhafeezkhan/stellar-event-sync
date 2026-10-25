@@ -34,6 +34,15 @@ export interface EventSource {
   fetch(request: FetchRequest): Promise<EventPage>;
 }
 
+/** Immutable metadata returned by the read-only checkpoint inspector. */
+export interface CheckpointInspection {
+  readonly schemaVersion: 1;
+  readonly source: string;
+  readonly cursor?: string;
+  readonly nextLedger: number;
+  readonly updatedAt: string;
+}
+
 export type SyncState = 'complete' | 'incomplete-history' | 'incomplete-page-limit';
 
 interface SyncResultBase {
