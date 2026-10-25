@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { SECRET_REDACTION_CASES } from './fixtures/secret-redaction.js';
+import { healthFixture } from './fixtures/rpc-builders.js';
 import {
   evaluateRetry,
   isRetryableStatus,
@@ -42,7 +43,7 @@ test('retries a transient HTTP failure without changing the request', async () =
       attempts += 1;
       return attempts === 1
         ? response({ error: 'temporary' }, 503)
-        : response({ result: { oldestLedger: 1, latestLedger: 2, ledgerRetentionWindow: 2 } });
+        : response({ result: healthFixture() });
     },
   });
   assert.equal((await source.health()).latestLedger, 2);
