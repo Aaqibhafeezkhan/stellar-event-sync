@@ -1,5 +1,9 @@
 import { DatabaseSync } from 'node:sqlite';
-import type { StellarEvent } from './types.js';
+import { statSync } from 'node:fs';
+import { CheckpointInspectionError } from './errors.js';
+import type { CheckpointInspection, StellarEvent } from './types.js';
+
+export const SQLITE_SCHEMA_VERSION = 1 as const;
 
 export interface Checkpoint {
   cursor?: string;
@@ -81,5 +85,65 @@ export class SqliteEventStore {
 
   close(): void {
     this.database.close();
+  }
+}
+
+/** Read checkpoint metadata without creating or mutating a SQLite database. */
+export class SqliteCheckpointInspector {
+  readonly #database: DatabaseSync;
+
+  constructor(path: string) {
+    try {
+      const file = statSync(path);
+      if (!file.isFile()) throw new Error('path is not a file');
+      if ((file.mode & 0o444) === 0) throw new Error('file is not readable');
+      this.#database = new DatabaseSync(path, { readOnly: true });
+      this.#validateSchema();
+    } catch (error) {
+      throw new CheckpointInspectionError('Unable to open checkpoint store for inspection', {
+        cause: error,
+      });
+    }
+  }
+
+  inspect(source: string): Readonly<CheckpointInspection> | undefined {
+    try {
+      const row = this.#database
+        .prepare('SELECT source, cursor, next_ledger, updated_at FROM checkpoints WHERE source = ?')
+        .get(source) as
+        | {
+            source: string;
+            cursor: string | null;
+            next_ledger: number;
+            updated_at: string;
+          }
+        | undefined;
+      if (!row) return undefined;
+      return Object.freeze({
+        schemaVersion: SQLITE_SCHEMA_VERSION,
+        source: row.source,
+        ...(row.cursor === null ? {} : { cursor: row.cursor }),
+        nextLedger: row.next_ledger,
+        updatedAt: row.updated_at,
+      });
+    } catch (error) {
+      throw new CheckpointInspectionError('Unable to inspect checkpoint metadata', {
+        cause: error,
+      });
+    }
+  }
+
+  close(): void {
+    this.#database.close();
+  }
+
+  #validateSchema(): void {
+    const columns = this.#database.prepare('PRAGMA table_info(checkpoints)').all() as Array<{
+      name: string;
+    }>;
+    const actual = new Set(columns.map(({ name }) => name));
+    for (const required of ['source', 'cursor', 'next_ledger', 'updated_at']) {
+      if (!actual.has(required)) throw new Error(`missing checkpoint column: ${required}`);
+    }
   }
 }

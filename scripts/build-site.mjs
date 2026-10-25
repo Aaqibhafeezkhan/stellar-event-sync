@@ -65,7 +65,7 @@ const docs = [
     'Core concepts',
     'checkpoints',
     'Checkpoint persistence',
-    `<p>Each source has one checkpoint containing an optional opaque cursor and a next-ledger value. Event inserts and checkpoint updates happen within one <code>BEGIN IMMEDIATE</code> transaction.</p><h2>Why both fields?</h2><p>The cursor resumes an active walk. The next ledger supports retention checks and a fresh range after the cursor has completed. Cursors are never parsed or synthesized.</p>`,
+    `<p>Each source has one checkpoint containing an optional opaque cursor and a next-ledger value. Event inserts and checkpoint updates happen within one <code>BEGIN IMMEDIATE</code> transaction.</p><h2>Why both fields?</h2><p>The cursor resumes an active walk. The next ledger supports retention checks and a fresh range after the cursor has completed. Cursors are never parsed or synthesized.</p><h2>Read-only inspection</h2><p><code>SqliteCheckpointInspector</code> opens an existing database in read-only mode and returns frozen checkpoint metadata including the current schema version. <code>inspect(source)</code> returns <code>undefined</code> when that source has no checkpoint. Missing, unreadable, or malformed stores throw <code>CheckpointInspectionError</code>; inspection never creates a database or exposes its handle.</p>${code(`const inspector = new SqliteCheckpointInspector('./events.sqlite');\ntry {\n  const checkpoint = inspector.inspect('my-source');\n  console.log(checkpoint);\n} finally {\n  inspector.close();\n}`)}`,
   ],
   [
     'Reliability',
