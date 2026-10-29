@@ -202,6 +202,27 @@ function isAbortError(error: unknown): boolean {
   return false;
 }
 
+async function waitForRetry(
+  sleep: (ms: number) => Promise<void>,
+  delayMs: number,
+  attempt: number,
+  method: string,
+): Promise<void> {
+  if (delayMs <= 0) return;
+  try {
+    await sleep(delayMs);
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new RpcAbortError(
+        'RPC retry delay aborted',
+        { attempt, method, delayMs },
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+}
+
 /** Stellar RPC accepts `getEvents` page limits from 1 through 10,000. */
 export const MIN_PAGE_LIMIT = 1;
 export const MAX_PAGE_LIMIT = 10_000;
@@ -416,9 +437,7 @@ export class StellarRpcEventSource implements EventSource {
           break;
         }
 
-        if (decision.delayMs > 0) {
-          await policy.sleep(decision.delayMs);
-        }
+        await waitForRetry(policy.sleep, decision.delayMs, attempt, method);
       }
     }
 

@@ -20,6 +20,8 @@ The repository currently declares `0.1.0` in `package.json`, but the project has
 
 ### Changed
 
+- Retry tests can use the injected scheduler without wall-clock waits; cancellation during a
+  scheduled delay now reports a typed `RPC_ABORTED` error.
 - A synchronization run that hits `maxPages` while a continuation cursor remains now reports `incomplete-page-limit` instead of reporting complete progress; the checkpoint remains resumable ([implementation](https://github.com/Webghost01-NG/stellar-event-sync/commit/81a7a3c44afcc715a5c0b2e2a571659f04fac160)).
 
 ### Fixed
