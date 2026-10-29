@@ -263,6 +263,84 @@ test('applies jitter strategies and bounds backoff to maxDelayMs', async () => {
   assert.deepEqual(sleeps, [400]);
 });
 
+test('uses the injected scheduler for the exact exponential backoff sequence', async () => {
+  const delays: number[] = [];
+  let attempts = 0;
+  const source = new StellarRpcEventSource('https://rpc.invalid', {
+    retry: {
+      maxRetries: 3,
+      initialDelayMs: 25,
+      maxDelayMs: 100,
+      backoffFactor: 2,
+      jitter: 'none',
+      sleep: async (delayMs) => {
+        delays.push(delayMs);
+      },
+    },
+    fetch: async () => {
+      attempts += 1;
+      return attempts <= 3
+        ? response({ error: 'temporary' }, 503)
+        : response({ result: healthFixture() });
+    },
+  });
+
+  await source.health();
+  assert.equal(attempts, 4);
+  assert.deepEqual(delays, [25, 50, 100]);
+});
+
+test('does not schedule a wait when retry delay is zero', async () => {
+  let attempts = 0;
+  let scheduled = false;
+  const source = new StellarRpcEventSource('https://rpc.invalid', {
+    retry: {
+      maxRetries: 1,
+      initialDelayMs: 0,
+      sleep: async () => {
+        scheduled = true;
+      },
+    },
+    fetch: async () => {
+      attempts += 1;
+      return attempts === 1
+        ? response({ error: 'temporary' }, 503)
+        : response({ result: healthFixture() });
+    },
+  });
+
+  await source.health();
+  assert.equal(attempts, 2);
+  assert.equal(scheduled, false);
+});
+
+test('reports cancellation during an injected retry delay as a typed abort', async () => {
+  let attempts = 0;
+  const source = new StellarRpcEventSource('https://rpc.invalid', {
+    retry: {
+      maxRetries: 2,
+      initialDelayMs: 75,
+      sleep: async () => {
+        throw new DOMException('Delay canceled', 'AbortError');
+      },
+    },
+    fetch: async () => {
+      attempts += 1;
+      return response({ error: 'temporary' }, 503);
+    },
+  });
+
+  await assert.rejects(
+    source.health(),
+    (error) =>
+      error instanceof RpcAbortError &&
+      error.code === 'RPC_ABORTED' &&
+      error.details['delayMs'] === 75 &&
+      error.details['attempt'] === 0,
+  );
+  assert.equal(attempts, 1);
+});
+
 test('request timeout has a typed diagnostic and retries up to maxRetries', async () => {
   const sleeps: number[] = [];
   const fakeSleep = async (ms: number): Promise<void> => {
